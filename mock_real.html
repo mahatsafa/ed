@@ -34,6 +34,8 @@
 </ul>
 <a class="tasksBtnext" href="javascript:void(0)">Next</a>
 <div id="nav"></div>
+<!-- Panel Dictionary: select ini terlihat di situs asli setelah menu Dictionary dibuka; bukan bagian soal. -->
+<div id="DictionaryPanelContainer"><select id="selectLanguage"><option value="">--</option><option value="id">Indonesia</option></select></div>
 
 <script>
 const params = new URLSearchParams(location.search);
@@ -41,6 +43,7 @@ const skenario = params.get("skenario");
 let tugas = ["video", "pilihan", "dropdown", "cloze", "bicara"];
 if (skenario === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak dikenal bot
 if (skenario === "drag") tugas = ["drag", "pilihan"];  // video + soal seret (tidak didukung)
+if (skenario === "kosong") tugas = ["kosong"];  // tidak ada kontrol soal yang dikenal
 let i = 0;
 const selesai = new Set();
 window.seeAnswerKlik = 0;
@@ -110,6 +113,9 @@ function gambar() {
       $("#status-start").textContent = "sudah dimulai";
       tandaiSelesai();
     });
+  } else if (jenis === "kosong") {
+    $("#petunjuk").textContent = "Read the ad.";  // tidak ada kontrol yang dikenal bot
+    area.innerHTML = "<p>Hanya teks.</p>";
   } else {
     $("#petunjuk").textContent = "Type your answer in the box.";  // tidak dikenal
     area.innerHTML = '<textarea id="ta" rows="2" cols="30"></textarea>';
@@ -165,7 +171,10 @@ $("#CheckAnswer").addEventListener("click", () => {
   $("#reminder").classList.toggle("hidden", !!benar);
   if (benar) tandaiSelesai();
 });
-$(".tasksBtnext").addEventListener("click", () => { if (i < tugas.length - 1) { i += 1; gambar(); } });
+// Setelah Next, halaman dikosongkan dulu lalu dirender 500 ms kemudian (seperti Angular di situs asli).
+$(".tasksBtnext").addEventListener("click", () => {
+  if (i < tugas.length - 1) { i += 1; $("#area").innerHTML = ""; setTimeout(gambar, 500); }
+});
 gambar();
 </script>
 </body>

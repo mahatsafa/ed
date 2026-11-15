@@ -97,16 +97,29 @@ def pilih_radio(page, timeout=TIMEOUT_MS):
 def isi_dropdown(page, timeout=TIMEOUT_MS):
     daftar = page.locator(SEL["dropdown"])
     jumlah = daftar.count()
-    if not jumlah:
-        return False
+    dikerjakan = False
     for n in range(jumlah):  # batas atas = jumlah dropdown
         satu = daftar.nth(n)
-        if not satu.is_visible():
+        # lewati dropdown milik panel Dictionary (bukan bagian soal) dan yang tak terlihat
+        if not satu.is_visible() or satu.evaluate("e => !!e.closest('#DictionaryPanelContainer')"):
             continue
         satu.select_option(index=1, timeout=timeout)
         periksa(page, f"dropdown_{n + 1}_terisi",
                 lambda s=satu: expect(s).not_to_have_value("", timeout=timeout))
-    return True
+        dikerjakan = True
+    return dikerjakan
+
+
+def tunggu_stabil(page, jeda_ms=400, perlu=2, maks_baca=15):
+    """Tunggu teks halaman tidak berubah selama `perlu` pembacaan berturut-turut (render selesai)."""
+    sama, terakhir = 0, page.evaluate(TEKS_HALAMAN)
+    for _ in range(maks_baca):  # batas atas pembacaan
+        page.wait_for_timeout(jeda_ms)
+        sekarang = page.evaluate(TEKS_HALAMAN)
+        sama = sama + 1 if sekarang == terakhir else 0
+        terakhir = sekarang
+        if sama >= perlu:
+            return
 
 
 def seret(page, sumber, tujuan, nama, timeout=TIMEOUT_MS):
@@ -221,6 +234,7 @@ def jalankan_pelajaran(page, maks=MAX_HALAMAN, timeout=TIMEOUT_MS):
     while ringkasan["halaman"] < maks:
         ringkasan["halaman"] += 1
         log.info("== Halaman %d", ringkasan["halaman"])
+        tunggu_stabil(page)
         kerjakan_halaman(page, ringkasan, timeout)
         if not lanjut(page, timeout):
             log.info("Next tidak mengubah halaman: pelajaran selesai.")

@@ -148,6 +148,14 @@ with sync_playwright() as pw:
     page.close()
 
     page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=kosong")
+    check("pelajaran: select milik panel Dictionary tidak dianggap soal -> halaman tak dikenal",
+          raises(lambda: pelajaran.jalankan_pelajaran(page, maks=10, timeout=4000),
+                 pelajaran.JenisSoalTidakDikenal)
+          and page.locator("#selectLanguage").input_value() == "")
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=tidakdikenal")
     check("pelajaran: jenis soal tak dikenal -> berhenti, tidak melompat",
           raises(lambda: pelajaran.jalankan_pelajaran(page, maks=10, timeout=4000),
