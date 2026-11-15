@@ -20,6 +20,9 @@ SEL = {
     "video": "video",
     "radio": "input.layout__radio",
     "dropdown": "select",
+    "cloze_kotak": ".prCLZ__regContainer .dndZone",  # kotak kosong
+    "cloze_kata": ".prCLZ__wordsBankWrapper .dnditem",  # kata di bank
+    "kata_terisi": ".dnditem",
     "start": ".speakingInteractButtonWrapper a.continue",
     "start_nonaktif": ".speakingInteractButtonWrapper .continueWrapper.disable",
     "cek": "#CheckAnswer",
@@ -105,6 +108,43 @@ def isi_dropdown(page, timeout=TIMEOUT_MS):
     return True
 
 
+def seret(page, sumber, tujuan, nama, timeout=TIMEOUT_MS):
+    """Seret dengan mouse bertahap (Dragula butuh beberapa gerakan mouse, bukan satu lompatan)."""
+    setup_logger().info("Seret: %s", nama)
+    tujuan.scroll_into_view_if_needed(timeout=timeout)
+    sumber.scroll_into_view_if_needed(timeout=timeout)
+    a, b = sumber.bounding_box(), tujuan.bounding_box()
+    if not a or not b:
+        raise RuntimeError(f"Posisi {nama} tidak terbaca.")
+    ax, ay = a["x"] + a["width"] / 2, a["y"] + a["height"] / 2
+    bx, by = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
+    page.mouse.move(ax, ay)
+    page.mouse.down()
+    page.mouse.move(ax + 8, ay + 8, steps=4)
+    page.mouse.move(bx, by, steps=15)
+    page.mouse.up()
+
+
+def isi_cloze(page, timeout=TIMEOUT_MS):
+    """Isi tiap kotak kosong dengan kata dari bank (urutan bank; tanpa membaca kunci)."""
+    kotak = page.locator(SEL["cloze_kotak"])
+    jumlah = kotak.count()
+    if not jumlah:
+        return False
+    for k in range(jumlah):  # batas atas = jumlah kotak
+        satu = kotak.nth(k)
+        if satu.locator(SEL["kata_terisi"]).count():
+            continue  # sudah terisi
+        kata = page.locator(SEL["cloze_kata"])
+        if not kata.count():
+            screenshot_on_fail(page, "cloze_kata_habis")
+            raise RuntimeError("Kata di bank habis sebelum semua kotak terisi.")
+        seret(page, kata.first, satu, f"kata_ke_kotak_{k + 1}", timeout)
+        periksa(page, f"kotak_{k + 1}_terisi", lambda s=satu: expect(
+            s.locator(SEL["kata_terisi"])).to_have_count(1, timeout=timeout))
+    return True
+
+
 def klik_start(page, timeout=TIMEOUT_MS):
     start = page.locator(SEL["start"])
     if not start.count():
@@ -145,6 +185,9 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
         perlu_cek = True
     if isi_dropdown(page, timeout):
         dikerjakan.append("dropdown")
+        perlu_cek = True
+    if isi_cloze(page, timeout):
+        dikerjakan.append("isian kata")
         perlu_cek = True
     if klik_start(page, timeout):
         dikerjakan.append("start")

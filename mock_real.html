@@ -36,7 +36,7 @@
 <script>
 const params = new URLSearchParams(location.search);
 const skenario = params.get("skenario");
-let tugas = ["video", "pilihan", "dropdown", "bicara"];
+let tugas = ["video", "pilihan", "dropdown", "cloze", "bicara"];
 if (skenario === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak dikenal bot
 if (skenario === "drag") tugas = ["drag", "pilihan"];  // video + soal seret (tidak didukung)
 let i = 0;
@@ -90,6 +90,15 @@ function gambar() {
   } else if (jenis === "dropdown") {
     $("#petunjuk").textContent = "Select the correct answer from the drop-down list.";
     area.innerHTML = '<p>It <select id="dd"><option value=""></option><option>comes</option><option>come</option></select> at 10 A.M.</p>';
+  } else if (jenis === "cloze") {
+    $("#petunjuk").textContent = "Read the interview, and fill in the missing words.";
+    const kotak = [0, 1, 2].map((n) =>
+      `<div class="prCLZ__regContainer" style="display:inline-block;margin:4px"><div class="dndZone" id="0_${n}" style="min-width:90px;min-height:28px;border-bottom:2px solid #000"></div></div>`).join(" . ");
+    const kata = ["teach", "agency", "need", "working"].map((w) =>
+      `<div class="dnditem draggable" style="display:inline-block;margin:4px;padding:4px;border:1px solid #888;user-select:none">${w}</div>`).join("");
+    area.innerHTML = `<div class="prCLZ__answersWrapper"><p>Hi ${kotak}</p></div>` +
+      `<div class="prCLZ__wordsBankWrapper" id="bankContainer"><div class="dndZone" id="bank_9">${kata}</div></div>`;
+    pasangSeret();
   } else if (jenis === "bicara") {
     $("#petunjuk").textContent = "Speaking practice.";
     area.innerHTML = '<div class="speakingInteractButtonWrapper"><div class="buttonWrapper continueWrapper disable"><a class="button continue">Start</a></div></div><p id="status-start"></p>';
@@ -105,6 +114,24 @@ function gambar() {
   }
   gambarNav();
 }
+
+// Seret-lepas mirip Dragula: perlu mousedown, beberapa mousemove, lalu mouseup di atas kotak kosong.
+let pegang = null, bergerak = 0;
+function pasangSeret() {
+  document.querySelectorAll(".dnditem").forEach((el) => el.addEventListener("mousedown", (e) => {
+    pegang = el; bergerak = 0; e.preventDefault();
+  }));
+}
+document.addEventListener("mousemove", () => { if (pegang) bergerak += 1; });
+document.addEventListener("mouseup", (e) => {
+  if (!pegang) return;
+  const zona = document.elementFromPoint(e.clientX, e.clientY)?.closest(".dndZone");
+  if (bergerak >= 2 && zona && zona.id !== "bank_9" && !zona.querySelector(".dnditem")) {
+    zona.appendChild(pegang);
+    pegang.style.margin = "0";
+  }
+  pegang = null;
+});
 
 // Modal "Video Tutorials" seperti situs asli: menutupi halaman, hilang (dihapus dari DOM) saat ditutup.
 function tutupModal() { const m = $("ngb-modal-window"); if (m) m.remove(); }
@@ -131,7 +158,8 @@ $("#SeeAnswer").addEventListener("click", () => { window.seeAnswerKlik += 1; });
 $("#CheckAnswer").addEventListener("click", () => {
   const jenis = tugas[i];
   const benar = (jenis === "pilihan" && document.querySelector("input.layout__radio:checked")) ||
-                (jenis === "dropdown" && $("#dd").value !== "");
+                (jenis === "dropdown" && $("#dd").value !== "") ||
+                (jenis === "cloze" && document.querySelectorAll(".prCLZ__regContainer .dnditem").length === 3);
   $("#reminder").classList.toggle("hidden", !!benar);
   if (benar) tandaiSelesai();
 });

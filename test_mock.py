@@ -128,11 +128,11 @@ with sync_playwright() as pw:
     page = browser.new_page()
     page.goto(URL_ASLI)
     ring = pelajaran.jalankan_pelajaran(page, maks=10, timeout=4000)
-    check("pelajaran: 4 halaman dikerjakan, berhenti di halaman terakhir, semua terverifikasi",
-          ring == {"halaman": 4, "tak_terverifikasi": 0})
+    check("pelajaran: 5 halaman dikerjakan, berhenti di halaman terakhir, semua terverifikasi",
+          ring == {"halaman": 5, "tak_terverifikasi": 0})
     check("pelajaran: See Answer tidak pernah diklik", page.evaluate("() => window.seeAnswerKlik") == 0)
-    check("pelajaran: 4 tugas tercatat selesai",
-          page.locator(".learning__tasksNav_task--done").count() == 4)
+    check("pelajaran: 5 tugas tercatat selesai",
+          page.locator(".learning__tasksNav_task--done").count() == 5)
     check("pelajaran: modal Video Tutorials dari Help ditutup", page.locator("ngb-modal-window").count() == 0)
     check("pelajaran: Dictionary lalu Help sudah diklik (Help terbuka)", "settingsMenu__listCat--open" in
           page.locator("#settingsMenu__help").get_attribute("class"))
