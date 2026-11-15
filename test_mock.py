@@ -133,6 +133,18 @@ with sync_playwright() as pw:
     check("pelajaran: See Answer tidak pernah diklik", page.evaluate("() => window.seeAnswerKlik") == 0)
     check("pelajaran: 4 tugas tercatat selesai",
           page.locator(".learning__tasksNav_task--done").count() == 4)
+    check("pelajaran: modal Video Tutorials dari Help ditutup", page.locator("ngb-modal-window").count() == 0)
+    check("pelajaran: Dictionary lalu Help sudah diklik (Help terbuka)", "settingsMenu__listCat--open" in
+          page.locator("#settingsMenu__help").get_attribute("class"))
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=drag")
+    check("pelajaran: soal 'Drag ...' -> berhenti, tidak melompat ke Next",
+          raises(lambda: pelajaran.jalankan_pelajaran(page, maks=10, timeout=4000),
+                 pelajaran.JenisSoalTidakDikenal)
+          and page.locator("#petunjuk").inner_text() == "Drag the correct answer."
+          and page.locator(".learning__tasksNav_task--done").count() == 0)
     page.close()
 
     page = browser.new_page()

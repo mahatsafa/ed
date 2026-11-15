@@ -13,7 +13,10 @@ from playwright.sync_api import expect
 from helpers import TIMEOUT_MS, click, periksa, screenshot_on_fail, setup_logger
 
 SEL = {
+    "video_overlay": ".learning__RAMRButton--play",  # tombol putar yang menutupi <video>
     "video_kustom": "#CTrackerPlayBtn",
+    "modal": "ngb-modal-window",
+    "modal_tutup": "button.close, [aria-label=Close], .close",
     "video": "video",
     "radio": "input.layout__radio",
     "dropdown": "select",
@@ -25,6 +28,8 @@ SEL = {
 }
 HEADER_ASLI = ("settingsMenu__dictionary", "settingsMenu__help")  # dua tombol header yang diklik
 MAX_HALAMAN = 30  # batas halaman per jalan
+# Instruksi soal yang belum didukung bot: berhenti, jangan lompat ke Next tanpa menjawab.
+TIDAK_DIDUKUNG = re.compile(r"^\s*(Drag|Type|Write|Fill|Match|Put|Record|Say|Speak|Order)\b")
 MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 TEKS_HALAMAN = "() => document.body.innerText.replace(/\\d/g, '')"  # angka dibuang (waktu video)
@@ -34,19 +39,37 @@ class JenisSoalTidakDikenal(RuntimeError):
     """Halaman soal tidak punya elemen yang dikenal bot."""
 
 
+def tutup_modal(page, timeout=TIMEOUT_MS):
+    """Tutup modal (mis. Video Tutorials dari menu Help) kalau terbuka: Escape, lalu tombol tutup."""
+    modal = page.locator(SEL["modal"])
+    if not modal.count():
+        return
+    setup_logger().info("Modal terbuka, ditutup")
+    page.keyboard.press("Escape")
+    try:
+        expect(modal).to_have_count(0, timeout=min(timeout, 3000))
+    except AssertionError:
+        click(page, modal.locator(SEL["modal_tutup"]).first, "tutup_modal", timeout)
+        periksa(page, "modal_tertutup", lambda: expect(modal).to_have_count(0, timeout=timeout))
+
+
 def klik_header(page, timeout=TIMEOUT_MS):
-    """Klik dua tombol header, pastikan menunya terbuka."""
+    """Klik dua tombol header, pastikan menunya terbuka, lalu tutup modal yang muncul."""
     for id_ in HEADER_ASLI:
         tombol = page.locator(f"#{id_}")
         click(page, tombol, id_, timeout)
         periksa(page, f"{id_}_terbuka", lambda t=tombol: expect(t).to_have_class(
             re.compile(r"settingsMenu__listCat--open"), timeout=timeout))
+        tutup_modal(page, timeout)
 
 
 def putar_video(page, timeout=TIMEOUT_MS):
+    overlay = page.locator(SEL["video_overlay"])
     kustom = page.locator(SEL["video_kustom"])
     video = page.locator(SEL["video"]).first
-    if kustom.count() and kustom.is_visible():
+    if overlay.count() and overlay.first.is_visible():
+        click(page, overlay.first, "video_tombol_putar", timeout)
+    elif kustom.count() and kustom.is_visible():
         click(page, kustom, "video_tombol_putar", timeout)
     elif video.count() and video.is_visible():
         if video.evaluate("v => v.paused"):  # jangan klik kalau sudah berjalan (bisa menjeda)
@@ -108,6 +131,11 @@ def cek_jawaban(page, sebelum, ringkasan, timeout=TIMEOUT_MS):
 
 def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     log = setup_logger()
+    tak_didukung = page.get_by_text(TIDAK_DIDUKUNG)
+    if tak_didukung.count():  # ada instruksi (mis. "Drag ...") yang belum bisa dikerjakan bot
+        teks = tak_didukung.first.inner_text()[:60]
+        screenshot_on_fail(page, "instruksi_belum_didukung")
+        raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks!r}")
     sebelum = page.locator(SEL["selesai"]).count()
     dikerjakan, perlu_cek = [], False
     if putar_video(page, timeout):
@@ -146,7 +174,6 @@ def lanjut(page, timeout=TIMEOUT_MS):
 def jalankan_pelajaran(page, maks=MAX_HALAMAN, timeout=TIMEOUT_MS):
     log = setup_logger()
     ringkasan = {"halaman": 0, "tak_terverifikasi": 0}
-    klik_header(page, timeout)
     while ringkasan["halaman"] < maks:
         ringkasan["halaman"] += 1
         log.info("== Halaman %d", ringkasan["halaman"])
@@ -156,5 +183,6 @@ def jalankan_pelajaran(page, maks=MAX_HALAMAN, timeout=TIMEOUT_MS):
             break
     else:
         log.warning("Batas %d halaman tercapai, berhenti.", maks)
+    klik_header(page, timeout)  # terakhir, supaya modal dari menu Help tidak menghalangi soal
     log.info("Ringkasan: %s", ringkasan)
     return ringkasan

@@ -9,10 +9,13 @@
   .learning__tasksNav_task { display: inline-block; width: 14px; height: 14px; border: 1px solid #333; margin: 2px; }
   .learning__tasksNav_task--done { background: #2a6; }
   li { cursor: pointer; }
+  .kotak-video { position: relative; display: inline-block; }
+  .learning__RAMROverlayW { position: absolute; inset: 0; }
+  .learning__RAMRButton { width: 100%; height: 100%; }
 </style>
 </head>
 <body>
-<!-- Meniru selector situs asli. Hanya untuk uji otomatis, bukan situs sebenarnya. -->
+<!-- Meniru selector dan perilaku situs asli. Hanya untuk uji otomatis, bukan situs sebenarnya. -->
 <header>
   <ul>
     <li id="settingsMenu__personal" class="settingsMenu__listCat settingsMenu__listCat--closed">My Info</li>
@@ -32,14 +35,16 @@
 
 <script>
 const params = new URLSearchParams(location.search);
-const tugas = ["video", "pilihan", "dropdown", "bicara"];
-if (params.get("skenario") === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak dikenal bot
+const skenario = params.get("skenario");
+let tugas = ["video", "pilihan", "dropdown", "bicara"];
+if (skenario === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak dikenal bot
+if (skenario === "drag") tugas = ["drag", "pilihan"];  // video + soal seret (tidak didukung)
 let i = 0;
 const selesai = new Set();
 window.seeAnswerKlik = 0;
 const $ = (s) => document.querySelector(s);
 
-// Pemutar: video dari canvas; klik pada video memutar (seperti pemutar situs asli).
+// Video dari canvas.
 const kanvas = document.createElement("canvas");
 kanvas.width = 160; kanvas.height = 90;
 const ctx = kanvas.getContext("2d");
@@ -52,17 +57,32 @@ function gambarNav() {
     `<span class="learning__tasksNav_task${selesai.has(n) ? " learning__tasksNav_task--done" : ""}"></span>`).join("");
 }
 
+// Pemutar seperti situs asli: tombol putar menutupi <video>, klik langsung ke video tertahan.
+function pasangVideo(area) {
+  area.insertAdjacentHTML("afterbegin",
+    '<div class="kotak-video"><video id="MP" muted width="160" height="90"></video>' +
+    '<div class="learning__RAMROverlayW"><div class="learning__RAMRButton learning__RAMRButton--play"></div></div></div>');
+  const v = $("#MP");
+  v.srcObject = kanvas.captureStream(10);
+  v.addEventListener("playing", () => { if (tugas[i] === "video") tandaiSelesai(); });
+  $(".learning__RAMRButton--play").addEventListener("click", () => {
+    v.play();
+    $(".learning__RAMROverlayW").remove();
+  });
+}
+
 function gambar() {
   $("#reminder").classList.add("hidden");
   const jenis = tugas[i];
   const area = $("#area");
+  area.innerHTML = "";
   if (jenis === "video") {
     $("#petunjuk").textContent = "Watch the video.";
-    area.innerHTML = '<video id="v" muted width="160" height="90"></video>';
-    const v = $("#v");
-    v.srcObject = kanvas.captureStream(10);
-    v.addEventListener("click", () => v.play());
-    v.addEventListener("playing", tandaiSelesai);
+    pasangVideo(area);
+  } else if (jenis === "drag") {
+    $("#petunjuk").textContent = "Drag the correct answer.";
+    pasangVideo(area);
+    area.insertAdjacentHTML("beforeend", '<p>It ___ at 10 A.M. <span class="seret">comes</span></p>');
   } else if (jenis === "pilihan") {
     $("#petunjuk").textContent = "Choose the best answer.";
     area.innerHTML = [1, 2, 3, 4].map((n) =>
@@ -86,6 +106,18 @@ function gambar() {
   gambarNav();
 }
 
+// Modal "Video Tutorials" seperti situs asli: menutupi halaman, hilang (dihapus dari DOM) saat ditutup.
+function tutupModal() { const m = $("ngb-modal-window"); if (m) m.remove(); }
+function bukaModal() {
+  if ($("ngb-modal-window")) return;
+  document.body.insertAdjacentHTML("beforeend",
+    '<ngb-modal-window role="dialog" class="modal fade show d-block videoTutorialsModal" ' +
+    'style="position:fixed;inset:0;background:#fffe;z-index:99"><div class="modal-content">Video Tutorials ' +
+    '<button class="close" aria-label="Close">x</button></div></ngb-modal-window>');
+  $("ngb-modal-window .close").addEventListener("click", tutupModal);
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") tutupModal(); });
+
 document.querySelectorAll("header li").forEach((li) => li.addEventListener("click", () => {
   document.querySelectorAll("header li").forEach((x) => {
     x.classList.remove("settingsMenu__listCat--open");
@@ -93,6 +125,7 @@ document.querySelectorAll("header li").forEach((li) => li.addEventListener("clic
   });
   li.classList.add("settingsMenu__listCat--open");
   li.classList.remove("settingsMenu__listCat--closed");
+  if (li.id === "settingsMenu__help") bukaModal();
 }));
 $("#SeeAnswer").addEventListener("click", () => { window.seeAnswerKlik += 1; });
 $("#CheckAnswer").addEventListener("click", () => {
