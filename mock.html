@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Mock Engdis (latihan)</title>
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  header { display: flex; gap: 8px; padding: 8px 16px; background: #223; }
+  main { padding: 16px; max-width: 640px; }
+  section { border: 1px solid #ccc; margin: 12px 0; padding: 12px; }
+  .hidden { display: none; }
+  .blank { display: inline-block; width: 1.5em; border-bottom: 2px solid #000; text-align: center; }
+  .word { margin: 2px; }
+  #reminder, #login-error { color: #b00; }
+  #completed { color: #070; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<!-- Halaman login. Ini bukan situs asli, hanya latihan. -->
+<form id="login-form">
+  <h1>Login (mock)</h1>
+  <p><label>Username <input id="username" name="username" type="text"></label></p>
+  <p><label>Password <input id="password" name="password" type="password"></label></p>
+  <button id="btn-login" type="submit">Masuk</button>
+  <p id="login-error" class="hidden" role="alert">Username dan password wajib diisi.</p>
+</form>
+
+<!-- Halaman tugas: baru terlihat setelah login berhasil. -->
+<div id="dashboard" class="hidden">
+  <header>
+    <button id="header-btn-1" type="button" data-testid="header-1">Header 1</button>
+    <button id="header-btn-2" type="button" data-testid="header-2">Header 2</button>
+    <span id="header-status" style="color:#fff"></span>
+  </header>
+  <main>
+    <section id="sec-video">
+      <h2>1. Video</h2>
+      <!-- Video dibuat dari canvas supaya tidak perlu file; status: data-state -->
+      <video id="video" width="320" height="180" controls muted data-state="paused"></video>
+      <p>Status: <span id="video-status">belum diputar</span></p>
+    </section>
+
+    <section id="sec-quiz">
+      <h2>2. Pilihan jawaban</h2>
+      <fieldset id="quiz">
+        <label><input type="radio" name="answer" value="a"> A. Apple</label><br>
+        <label><input type="radio" name="answer" value="b"> B. Banana</label><br>
+        <label><input type="radio" name="answer" value="c"> C. Cherry</label>
+      </fieldset>
+      <button id="btn-submit" type="button">Submit</button>
+      <p id="reminder" class="hidden" role="alert">Reminder: pilih satu jawaban dulu.</p>
+      <p id="completed" class="hidden">Completed task</p>
+    </section>
+
+    <section id="sec-blank">
+      <h2>3. Isian huruf kosong</h2>
+      <p>H<span class="blank" id="blank-1" data-expected="e"></span>llo
+         W<span class="blank" id="blank-2" data-expected="o"></span>rld</p>
+      <div id="word-bank">
+        <button type="button" class="word" data-letter="o">o</button>
+        <button type="button" class="word" data-letter="e">e</button>
+      </div>
+      <p>Terisi: <span id="blank-status">0</span>/2</p>
+    </section>
+
+    <section id="sec-text">
+      <h2>4. Kolom teks</h2>
+      <p id="question-text">What is your name?</p>
+      <textarea id="text-answer" rows="2" cols="40"></textarea>
+    </section>
+
+    <section id="sec-mic">
+      <h2>5. Mikrofon dan Start</h2>
+      <button id="btn-mic" type="button" aria-label="Mikrofon">Mikrofon</button>
+      <span id="mic-status">belum diklik</span>
+      <p id="start-text" tabindex="0">Klik teks ini &lt;&gt; untuk mengaktifkan Start</p>
+      <button id="btn-start" type="button" disabled>Start</button>
+      <span id="start-status">belum dimulai</span>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// Login: berhasil kalau kedua isian terisi.
+$("login-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if ($("username").value.trim() && $("password").value) {
+    $("login-form").classList.add("hidden");
+    $("dashboard").classList.remove("hidden");
+  } else {
+    $("login-error").classList.remove("hidden");
+  }
+});
+
+// Video: gambar animasi dari canvas, direkam jadi stream.
+const canvas = document.createElement("canvas");
+canvas.width = 320; canvas.height = 180;
+const ctx = canvas.getContext("2d");
+let tick = 0;
+setInterval(() => {
+  ctx.fillStyle = `hsl(${tick % 360},60%,50%)`;
+  ctx.fillRect(0, 0, 320, 180);
+  tick += 5;
+}, 100);
+$("video").srcObject = canvas.captureStream(10);
+$("video").addEventListener("playing", () => {
+  $("video").dataset.state = "playing";
+  $("video-status").textContent = "sedang diputar";
+});
+$("video").addEventListener("pause", () => {
+  $("video").dataset.state = "paused";
+  $("video-status").textContent = "berhenti";
+});
+
+// Pilihan jawaban: submit tanpa memilih memunculkan reminder.
+$("btn-submit").addEventListener("click", () => {
+  const picked = document.querySelector("input[name=answer]:checked");
+  $("reminder").classList.toggle("hidden", !!picked);
+  $("completed").classList.toggle("hidden", !picked);
+});
+
+// Huruf kosong: klik huruf mengisi kotak kosong berikutnya.
+document.querySelectorAll(".word").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const empty = [...document.querySelectorAll(".blank")].find((b) => !b.textContent);
+    if (empty) empty.textContent = btn.dataset.letter;
+    $("blank-status").textContent =
+      [...document.querySelectorAll(".blank")].filter((b) => b.textContent).length;
+  });
+});
+
+// Mikrofon: klik mencatat status (tanpa merekam apa pun).
+$("btn-mic").addEventListener("click", () => {
+  $("mic-status").textContent = "mikrofon diklik";
+  $("btn-mic").dataset.state = "clicked";
+});
+
+// Start: aktif setelah teks diklik.
+$("start-text").addEventListener("click", () => { $("btn-start").disabled = false; });
+$("btn-start").addEventListener("click", () => { $("start-status").textContent = "sudah dimulai"; });
+
+// Dua tombol header.
+$("header-btn-1").addEventListener("click", () => { $("header-status").textContent = "header 1 diklik"; });
+$("header-btn-2").addEventListener("click", () => { $("header-status").textContent = "header 2 diklik"; });
+</script>
+</body>
+</html>
