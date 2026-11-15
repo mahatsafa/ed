@@ -134,6 +134,21 @@ with sync_playwright() as pw:
           and manusia.locator("#completed").is_visible())
     check("mode attach: tidak membaca .env/password (tak ada langkah login)",
           "Isi username" not in hasil.stdout + hasil.stderr)
+    ambil = subprocess.run(
+        [sys.executable, str(BASE / "ambil_html.py"), "--target", "mock", "--nama", "uji_ambil",
+         "--attach", f"http://127.0.0.1:{PORT_CDP}"],
+        capture_output=True, text=True, timeout=60)
+    html0 = (LOG_DIR / "uji_ambil_frame0.html").read_text(encoding="utf-8")
+    json0 = (LOG_DIR / "uji_ambil_elemen.json").read_text(encoding="utf-8")
+    check("ambil_html: exit 0 + file hasil ada",
+          ambil.returncode == 0 and (LOG_DIR / "uji_ambil.png").exists())
+    check("ambil_html: elemen tugas terdaftar, script dibuang",
+          "btn-start" in json0 and "header-btn-1" in json0 and "<script" not in html0)
+    check("ambil_html: tidak mengubah halaman (hanya baca)",
+          manusia.locator("#header-status").inner_text() == "header 2 diklik")
+    check("ambil_html: --nama berbahaya ditolak", subprocess.run(
+        [sys.executable, str(BASE / "ambil_html.py"), "--nama", "../x", "--attach", "http://x"],
+        capture_output=True, text=True, timeout=30).returncode != 0)
     manusia.close()
     check("mode attach: tab tidak ada -> bot berhenti (exit 1)", subprocess.run(
         [sys.executable, str(BASE / "bot.py"), "--target", "mock",

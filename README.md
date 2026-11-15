@@ -64,6 +64,34 @@ Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 - `main()`: membaca argumen (`--target mock|real`, `--headed`), membuka Chromium, menjalankan
   login, dan menutup browser di `finally`.
 
+## Menjalankan di Windows (mode attach, PowerShell)
+Folder: `C:\Users\<nama>\engdis-bot`. Mode attach tidak memakai `.env` dan tidak login.
+
+```powershell
+# 1. Setup sekali saja
+cd $HOME\engdis-bot
+$py = "$HOME\AppData\Local\Programs\Python\Python313\python.exe"
+& $py -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+```
+
+```powershell
+# 2. Buka Chrome dengan port debug (profil terpisah, wajib untuk Chrome terbaru)
+$chrome = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+$prof = "$HOME\chrome-tugas"
+& $chrome --remote-debugging-port=9222 --user-data-dir=$prof https://ed.engdis.com
+# Lalu SECARA MANUAL: centang verifikasi, login, buka halaman soal.
+```
+
+```powershell
+# 3. Jalankan bot di tab itu
+cd $HOME\engdis-bot
+.\.venv\Scripts\python bot.py --target real --attach http://127.0.0.1:9222
+```
+
+`ambil_html.py` hanya membaca halaman (tanpa klik) dan menyimpan strukturnya ke `logs/`,
+dipakai untuk mencocokkan selector asli. Tutup Chrome itu setelah selesai (port debug terbuka).
+
 ## Konsep singkat
 - **Selector**: alamat sebuah elemen di halaman, misalnya `#username` (elemen dengan id username).
 - **Wait**: menunggu elemen siap, bukan jeda waktu tetap (`sleep`). Locator Playwright
