@@ -35,12 +35,17 @@ def load_credentials():
 
 def cari_tab(browser, target):
     """Cari tab yang sudah Anda buka untuk target ini. Tidak ketemu = berhenti."""
-    terlihat = []
+    kandidat, terlihat = [], []
     for context in browser.contexts:
         for page in context.pages:
-            if CIRI_HALAMAN[target] in page.url:
-                return page
             terlihat.append(page.url.split("?")[0])
+            if CIRI_HALAMAN[target] in page.url and "error.html" not in page.url:
+                kandidat.append(page)
+    for page in kandidat:  # utamakan tab yang sedang tampil di layar
+        if page.evaluate("document.visibilityState") == "visible":
+            return page
+    if kandidat:
+        return kandidat[-1]
     raise RuntimeError(
         f"Tab '{CIRI_HALAMAN[target]}' tidak ditemukan. Tab yang terlihat bot: "
         f"{terlihat or 'tidak ada'}. Buka dan login di jendela Chrome dari blok 2, "

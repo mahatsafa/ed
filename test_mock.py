@@ -123,6 +123,9 @@ with sync_playwright() as pw:
 
     # --- Mode attach: "manusia" membuka + login, lalu bot menempel lewat CDP ---
     peramban = pw.chromium.launch(args=[f"--remote-debugging-port={PORT_CDP}"])
+    # tab "error" dibuka lebih dulu (seperti 404 di ED); bot harus melewatinya
+    decoy = peramban.new_page()
+    decoy.goto(URLS["mock"] + "#/error.html")
     manusia = halaman_login(peramban, user, password)
     hasil = subprocess.run(
         [sys.executable, str(BASE / "bot.py"), "--target", "mock",
