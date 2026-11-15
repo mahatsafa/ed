@@ -150,10 +150,13 @@ with sync_playwright() as pw:
         [sys.executable, str(BASE / "ambil_html.py"), "--nama", "../x", "--attach", "http://x"],
         capture_output=True, text=True, timeout=30).returncode != 0)
     manusia.close()
-    check("mode attach: tab tidak ada -> bot berhenti (exit 1)", subprocess.run(
+    kosong = subprocess.run(
         [sys.executable, str(BASE / "bot.py"), "--target", "mock",
          "--attach", f"http://127.0.0.1:{PORT_CDP}"],
-        capture_output=True, text=True, timeout=60).returncode == 1)
+        capture_output=True, text=True, timeout=60)
+    check("mode attach: tab tidak ada -> bot berhenti (exit 1)", kosong.returncode == 1)
+    check("mode attach: pesan error menyebut tab yang terlihat",
+          "Tab yang terlihat bot" in kosong.stdout + kosong.stderr)
     peramban.close()
 
 # --- Log dan screenshot ---
