@@ -92,6 +92,10 @@ cd $HOME\engdis-bot
 `ambil_html.py` hanya membaca halaman (tanpa klik) dan menyimpan strukturnya ke `logs/`,
 dipakai untuk mencocokkan selector asli. Tutup Chrome itu setelah selesai (port debug terbuka).
 
+Mode pantau: tambahkan `--pantau`. Pindah soal manual di Chrome; setiap soal baru (isi halaman
+berubah dan stabil) disimpan otomatis sebagai `<nama>01_...`, `<nama>02_...` (maksimal 40).
+Ctrl+C untuk berhenti.
+
 ## Konsep singkat
 - **Selector**: alamat sebuah elemen di halaman, misalnya `#username` (elemen dengan id username).
 - **Wait**: menunggu elemen siap, bukan jeda waktu tetap (`sleep`). Locator Playwright

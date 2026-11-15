@@ -1,6 +1,8 @@
 """Uji otomatis di mock.html. Jalankan: python test_mock.py"""
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -152,6 +154,36 @@ with sync_playwright() as pw:
     check("ambil_html: --nama berbahaya ditolak", subprocess.run(
         [sys.executable, str(BASE / "ambil_html.py"), "--nama", "../x", "--attach", "http://x"],
         capture_output=True, text=True, timeout=30).returncode != 0)
+    # --- Mode pantau: soal berganti -> hasil baru tersimpan otomatis ---
+    for sisa in LOG_DIR.glob("uji_pantau*"):
+        sisa.unlink()
+    proses = subprocess.Popen(
+        [sys.executable, str(BASE / "ambil_html.py"), "--target", "mock", "--nama", "uji_pantau",
+         "--pantau", "--attach", f"http://127.0.0.1:{PORT_CDP}"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def tunggu_file(nama_file, detik=30):
+        batas = time.monotonic() + detik
+        while time.monotonic() < batas:
+            if (LOG_DIR / nama_file).exists():
+                return True
+            manusia.wait_for_timeout(300)
+        return False
+
+    ada1 = tunggu_file("uji_pantau01_elemen.json")
+    manusia.evaluate("() => { document.querySelector('#question-text').textContent"
+                     " = 'Soal baru: where are you from?'; }")
+    ada2 = tunggu_file("uji_pantau02_elemen.json")
+    proses.send_signal(signal.SIGINT)
+    try:
+        proses.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        proses.kill()
+    check("pantau: soal pertama dan soal berganti tersimpan otomatis", ada1 and ada2)
+    check("pantau: Ctrl+C berhenti rapi (exit 0)", proses.returncode == 0)
+    kedua = LOG_DIR / "uji_pantau02_frame0.html"
+    check("pantau: hasil kedua memuat teks soal baru",
+          kedua.exists() and "Soal baru" in kedua.read_text(encoding="utf-8"))
     manusia.close()
     kosong = subprocess.run(
         [sys.executable, str(BASE / "bot.py"), "--target", "mock",
