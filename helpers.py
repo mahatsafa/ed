@@ -33,6 +33,18 @@ def screenshot_on_fail(page, name):
     return path
 
 
+def periksa(page, name, check):
+    """Jalankan pemeriksaan (expect). Gagal -> log, screenshot, lempar ulang error."""
+    log = setup_logger()
+    try:
+        check()
+    except Exception:
+        log.error("Pemeriksaan gagal: %s", name)
+        screenshot_on_fail(page, f"periksa_{name}")
+        raise
+    log.info("OK: %s", name)
+
+
 def wait_visible(page, locator, name, timeout=TIMEOUT_MS):
     """Tunggu sampai elemen terlihat. Gagal -> log, screenshot, lempar ulang error."""
     log = setup_logger()

@@ -21,6 +21,7 @@ cd ~/engdis-bot
 | `.gitignore` | Daftar file yang tidak boleh masuk GitHub: `.env`, `logs/`, `.venv/`. |
 | `helpers.py` | Fungsi kecil yang dipakai bersama. |
 | `login.py` | Fungsi login. |
+| `tugas.py` | Satu fungsi per persyaratan tugas (video, jawaban, huruf kosong, teks, mikrofon, Start, header). |
 | `bot.py` | Alur utama: baca `.env`, buka browser, panggil login. |
 | `mock.html` | Halaman latihan yang meniru elemen tugas. |
 | `test_mock.py` | Uji otomatis untuk login. |
@@ -32,6 +33,24 @@ cd ~/engdis-bot
   10 detik, catat error, simpan screenshot, lalu error diteruskan.
 - `click(page, locator, name)`: mengklik elemen. Playwright menunggu elemen siap sendiri.
 - `screenshot_on_fail(page, name)`: menyimpan gambar layar ke `logs/`.
+
+### tugas.py
+Setiap fungsi melakukan satu aksi lalu **memeriksa hasilnya** (bukan hanya mengklik):
+- `putar_video`: klik video, pastikan video benar-benar berjalan (tidak berhenti, waktu maju).
+- `pilih_jawaban`: pilih jawaban, klik Submit, pastikan "Completed task" muncul dan reminder tidak.
+- `isi_huruf_kosong`: klik pilihan kata sampai semua kotak terisi (maksimal sebanyak jumlah kotak).
+- `isi_teks`: salin teks pertanyaan ke kolom teks, pastikan isinya sama.
+- `klik_mikrofon`: klik mikrofon, pastikan halaman mencatat klik.
+- `klik_start`: klik teks pengaktif, tunggu Start aktif, klik Start.
+- `klik_header`: klik dua tombol header.
+- `jalankan_semua`: menjalankan semuanya berurutan seperti di panduan.
+
+Kalau pemeriksaan gagal, bot mencatat error, menyimpan screenshot ke `logs/`, lalu berhenti.
+
+### Mode attach (bot menempel ke browser yang Anda buka sendiri)
+`bot.py --attach http://127.0.0.1:9222` tidak membuka browser baru dan tidak login. Bot mencari
+tab yang sudah Anda buka (verifikasi dan login dilakukan manusia), lalu mengerjakan tugas di tab itu.
+Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 
 ### login.py
 - `SELECTORS`: daftar selector tiap target. Target `real` masih kosong (menunggu HTML
