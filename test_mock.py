@@ -10,6 +10,7 @@ from playwright.sync_api import expect, sync_playwright
 from bot import URLS, load_credentials
 from helpers import LOG_DIR
 from login import login
+import pelajaran
 import tugas
 
 BASE = Path(__file__).parent
@@ -120,6 +121,31 @@ with sync_playwright() as pw:
     page = halaman_login(browser, user, password)
     tugas.jalankan_semua(page)
     check("jalankan_semua berurutan sampai selesai", page.locator("#header-status").inner_text() == "header 2 diklik")
+    page.close()
+
+    # --- Pengulang pelajaran (halaman tiruan dengan selector situs asli) ---
+    URL_ASLI = (BASE / "mock_real.html").resolve().as_uri()
+    page = browser.new_page()
+    page.goto(URL_ASLI)
+    ring = pelajaran.jalankan_pelajaran(page, maks=10, timeout=4000)
+    check("pelajaran: 4 halaman dikerjakan, berhenti di halaman terakhir, semua terverifikasi",
+          ring == {"halaman": 4, "tak_terverifikasi": 0})
+    check("pelajaran: See Answer tidak pernah diklik", page.evaluate("() => window.seeAnswerKlik") == 0)
+    check("pelajaran: 4 tugas tercatat selesai",
+          page.locator(".learning__tasksNav_task--done").count() == 4)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=tidakdikenal")
+    check("pelajaran: jenis soal tak dikenal -> berhenti, tidak melompat",
+          raises(lambda: pelajaran.jalankan_pelajaran(page, maks=10, timeout=4000),
+                 pelajaran.JenisSoalTidakDikenal))
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI)
+    check("pelajaran: batas halaman ditaati", pelajaran.jalankan_pelajaran(
+        page, maks=2, timeout=4000)["halaman"] == 2)
     page.close()
     browser.close()
 

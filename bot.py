@@ -14,6 +14,7 @@ from playwright.sync_api import sync_playwright
 
 from helpers import setup_logger
 from login import login
+from pelajaran import jalankan_pelajaran
 from tugas import jalankan_semua
 
 URLS = {
@@ -31,6 +32,13 @@ def load_credentials():
     if not user or not password:
         raise SystemExit("ENGDIS_USER / ENGDIS_PASS di .env masih kosong.")
     return user, password
+
+
+def jalankan(page, target):
+    """Situs asli: pengulang pelajaran. Mock: semua elemen dalam satu halaman."""
+    if target == "real":
+        return jalankan_pelajaran(page)
+    return jalankan_semua(page)
 
 
 def cari_tab(browser, target):
@@ -68,14 +76,14 @@ def main():
             # Anda sudah login sendiri; bot hanya mengerjakan tugas di tab itu.
             browser = pw.chromium.connect_over_cdp(args.attach)
             page = cari_tab(browser, args.target)
-            jalankan_semua(page)
+            jalankan(page, args.target)
         else:
             user, password = load_credentials()
             browser = pw.chromium.launch(headless=not args.headed)
             page = browser.new_page()
             try:
                 login(page, args.target, URLS[args.target], user, password)
-                jalankan_semua(page)
+                jalankan(page, args.target)
             finally:
                 browser.close()
     log.info("Selesai.")

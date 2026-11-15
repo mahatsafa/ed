@@ -52,6 +52,16 @@ Kalau pemeriksaan gagal, bot mencatat error, menyimpan screenshot ke `logs/`, la
 tab yang sudah Anda buka (verifikasi dan login dilakukan manusia), lalu mengerjakan tugas di tab itu.
 Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 
+### pelajaran.py (situs asli)
+`jalankan_pelajaran` mengerjakan satu halaman soal, klik Next, lalu mengulang:
+- Yang dikenali: video (putar), pilihan ganda (pilih opsi pertama), dropdown (pilih opsi kedua),
+  Start (tunggu aktif lalu klik). Soal pilihan/dropdown di-submit lewat Check Answer.
+- Berhenti sendiri kalau jenis soal tidak dikenal, Next tidak mengubah halaman, atau batas 30 halaman.
+- Tidak pernah menyentuh See Answer (kunci jawaban) dan tidak membaca kunci.
+- Tombol header yang diklik: Dictionary dan Help (asumsi; ubah `HEADER_ASLI`).
+- Belum ada: soal huruf kosong, kolom teks, dan tombol mikrofon asli (selector belum terekam).
+Diuji di `mock_real.html`, halaman tiruan dengan selector situs asli.
+
 ### login.py
 - `SELECTORS`: daftar selector tiap target. Target `real` masih kosong (menunggu HTML
   dari form login asli), jadi bot berhenti dan tidak menebak.
