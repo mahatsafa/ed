@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 from helpers import TIMEOUT_MS, click, periksa, screenshot_on_fail, setup_logger
 
 SEL = {
+    "instruksi": ".learning__headerIW",  # kalimat instruksi di atas soal
     "video_overlay": ".learning__RAMRButton--play",  # tombol putar yang menutupi <video>
     "video_kustom": "#CTrackerPlayBtn",
     "modal": "ngb-modal-window",
@@ -171,11 +172,11 @@ def cek_jawaban(page, sebelum, ringkasan, timeout=TIMEOUT_MS):
 
 def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     log = setup_logger()
-    tak_didukung = page.get_by_text(TIDAK_DIDUKUNG)
-    if tak_didukung.count():  # ada instruksi (mis. "Drag ...") yang belum bisa dikerjakan bot
-        teks = tak_didukung.first.inner_text()[:60]
+    instruksi = page.locator(SEL["instruksi"])
+    teks = instruksi.first.inner_text().strip() if instruksi.count() else ""
+    if TIDAK_DIDUKUNG.match(teks):  # instruksi (mis. "Drag ...") yang belum bisa dikerjakan bot
         screenshot_on_fail(page, "instruksi_belum_didukung")
-        raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks!r}")
+        raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks[:60]!r}")
     sebelum = page.locator(SEL["selesai"]).count()
     dikerjakan, perlu_cek = [], False
     if putar_video(page, timeout):
