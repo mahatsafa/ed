@@ -54,13 +54,17 @@ Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 
 ### pelajaran.py (situs asli)
 `jalankan_pelajaran` mengerjakan satu halaman soal, klik Next, lalu mengulang:
-- Yang dikenali: video (putar), pilihan ganda (pilih opsi pertama), dropdown (pilih opsi kedua),
-  Start (tunggu aktif lalu klik). Soal pilihan/dropdown di-submit lewat Check Answer.
+- Yang dikenali: video (putar), pilihan ganda (opsi pertama tiap pertanyaan `.prMCQ__qaSet`, klik label),
+  dropdown kustom `.prFITB__DDLOptionsW` (item pertama), cloze dan pencocokan (seret kata dari bank
+  berurutan), Start (tunggu aktif lalu klik). Soal selain video/Start di-submit lewat Check Answer.
+- Berhenti sebelum mengklik apa pun kalau ada soal suara (`.answersWrapper.webRtc`), isian teks
+  (textarea/contenteditable/input teks di luar panel Dictionary), atau instruksi `Type|Write|Fill|Put|
+  Record|Say|Speak|Order`. Jawaban dipilih tanpa membaca kunci (benar atau salah tidak dibaca).
 - Berhenti sendiri kalau jenis soal tidak dikenal, Next tidak mengubah halaman, atau batas 30 halaman.
 - Tidak pernah menyentuh See Answer (kunci jawaban) dan tidak membaca kunci.
 - Tombol header yang diklik: Dictionary dan Help (asumsi; ubah `HEADER_ASLI`).
-- Belum ada: soal huruf kosong, kolom teks, dan tombol mikrofon asli (selector belum terekam).
-Diuji di `mock_real.html`, halaman tiruan dengan selector situs asli.
+- Belum ada: isian teks dan soal suara (selector belum terekam); bot berhenti dengan screenshot.
+Diuji di `mock_real.html`, halaman tiruan dengan selector situs asli (bukan situs asli).
 
 Auto-navigasi (`jalankan_pelajaran`): mulai dari dashboard (atau area belajar), buka unit pertama
 yang belum "Completed!", lalu lesson dan step pertama yang belum selesai (status dari dropdown:
