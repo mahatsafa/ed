@@ -1,12 +1,16 @@
 """Rekam struktur tab yang sudah Anda buka, per state, per frame. HANYA MEMBACA, tidak mengklik.
 
 Jalankan : python diagnosa.py --attach http://127.0.0.1:9222
+Mode pantau: python diagnosa.py --attach http://127.0.0.1:9222 --pantau
+  Kerjakan soal seperti biasa; tiap halaman/kelas CSS berubah dan sudah stabil, direkam otomatis
+  ke pantau_001, pantau_002, ... (Ctrl+C untuk berhenti).
   Bot meminta Anda pindah manual ke tiap state (dashboard, daftar_lesson, soal_1), lalu Enter.
   Tambah state lain dengan --state nama (boleh diulang; menggantikan daftar bawaan).
 Hasil di logs/diagnosa_<waktu>/<state>/ : ringkasan.json, frame<N>.html (tanpa script/style),
   frame<N>.png (screenshot frame yang terlihat).
 """
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -20,6 +24,8 @@ from helpers import LOG_DIR, setup_logger
 
 STATE_BAWAAN = ("dashboard", "daftar_lesson", "soal_1")
 MAX_STATE = 10  # batas jumlah state per jalan
+MAX_PANTAU = 150  # batas rekaman di mode pantau, lalu berhenti sendiri
+JEDA_PANTAU_MS = 1500  # jeda antar pengecekan di mode pantau
 MAX_KELAS = 200  # batas daftar nama kelas unik per frame
 MAX_TOMBOL = 40  # batas tombol Next/Back yang dicatat per frame
 SELEKTOR_KUNCI = (
@@ -56,6 +62,17 @@ JS_FRAME = """([kunci, prefix, maxKelas, maxTombol]) => {
   }
   return {judul: document.title, jumlah_elemen: document.querySelectorAll('*').length,
           selektor: hitung, tombol_nav: tombol, kelas_unik: [...kelas].sort()};
+}"""
+
+
+JS_TANDA = """() => {
+  const kelas = new Set();
+  for (const el of document.querySelectorAll('[class]')) {
+    if (typeof el.className !== 'string') continue;
+    for (const k of el.className.split(/\\s+/)) if (k && kelas.size < 2000) kelas.add(k);
+  }
+  const teks = document.body ? document.body.innerText.slice(0, 3000).replace(/\\d/g, '') : '';
+  return teks + '|' + [...kelas].sort().join(' ');
 }"""
 
 
@@ -98,7 +115,8 @@ def rekam_state(page, folder, log):
     frames = page.frames[:MAX_FRAME]
     hasil = [info_frame(page, i, f, folder, log) for i, f in enumerate(frames)]
     (folder / "ringkasan.json").write_text(
-        json.dumps({"url_tab": page.url, "frame": hasil}, indent=1, ensure_ascii=False),
+        json.dumps({"waktu": datetime.now().isoformat(timespec="seconds"),
+                    "url_tab": page.url, "frame": hasil}, indent=1, ensure_ascii=False),
         encoding="utf-8")
     for h in hasil:
         log.info("%s frame %d (%s): %s elemen, tombol nav %d", folder.name, h["frame"],
@@ -106,11 +124,48 @@ def rekam_state(page, folder, log):
     return hasil
 
 
+def tanda(page):
+    """Sidik jari halaman: URL, teks (angka dibuang), dan himpunan kelas CSS tiap frame."""
+    bagian = []
+    for frame in page.frames[:MAX_FRAME]:
+        try:
+            isi = frame.evaluate(JS_TANDA)
+        except Exception:
+            isi = ""
+        bagian.append(frame.url.split("?")[0] + "|" + isi)
+    return hashlib.sha1("\n".join(bagian).encode("utf-8")).hexdigest()
+
+
+def pantau(browser, target, akar, maks, log):
+    """Rekam tiap tampilan baru (stabil dua pengecekan berturut-turut, belum pernah terekam)."""
+    log.info("Mode pantau aktif (maks %d rekaman). Kerjakan manual; Ctrl+C untuk berhenti.", maks)
+    terlihat, terakhir, jumlah = set(), None, 0
+    try:
+        while jumlah < maks:
+            try:
+                page = cari_tab(browser, target)
+                sekarang = tanda(page)
+                if sekarang == terakhir and sekarang not in terlihat:
+                    rekam_state(page, akar / f"pantau_{jumlah + 1:03d}", log)
+                    terlihat.add(sekarang)
+                    jumlah += 1
+                terakhir = sekarang
+            except Exception as err:  # mis. halaman sedang berpindah; coba lagi di putaran berikut
+                log.warning("Pantau menunggu: %s", str(err)[:120])
+                terakhir = None
+            browser.contexts[0].pages[0].wait_for_timeout(JEDA_PANTAU_MS)
+    except KeyboardInterrupt:
+        pass
+    log.info("Pantau selesai: %d rekaman.", jumlah)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", choices=["mock", "real"], default="real")
     parser.add_argument("--attach", required=True, metavar="URL_CDP")
     parser.add_argument("--state", action="append", help="nama state; boleh diulang")
+    parser.add_argument("--pantau", action="store_true", help="rekam otomatis tiap tampilan berubah")
+    parser.add_argument("--maks", type=int, default=MAX_PANTAU, help="batas rekaman mode pantau")
     args = parser.parse_args()
     states = [nama_state_valid(s) for s in (args.state or STATE_BAWAAN)]
     if len(states) > MAX_STATE:
@@ -120,6 +175,9 @@ def main():
     akar = LOG_DIR / f"diagnosa_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(args.attach)
+        if args.pantau:
+            pantau(browser, args.target, akar, max(1, min(args.maks, MAX_PANTAU)), log)
+            states = []
         for nama in states:
             input(f"Pindah ke state '{nama}' di Chrome, tunggu halaman selesai dimuat, "
                   "lalu tekan Enter: ")
