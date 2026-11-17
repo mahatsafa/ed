@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Mock kursus (latihan)</title>
+<style>
+  .hidden { display: none; }
+  .learning__tasksNav_task { display: inline-block; width: 14px; height: 14px; border: 1px solid #333; margin: 2px; }
+  .learning__tasksNav_task--done { background: #2a6; }
+  li, .learning__dropDownList_item, .learning__dropDownListTitleW, .home__unitIW { cursor: pointer; }
+  .learning__dropDownListW { border: 1px solid #333; padding: 4px; }
+</style>
+</head>
+<body>
+<!-- Meniru struktur dashboard dan area belajar situs asli. Hanya untuk uji otomatis. -->
+<ul>
+  <li id="sitemenu__itemHome" class="sitemenu__item">Home</li>
+  <li id="settingsMenu__dictionary" class="settingsMenu__listCat settingsMenu__listCat--closed">Dictionary</li>
+  <li id="settingsMenu__help" class="settingsMenu__listCat settingsMenu__listCat--closed">Help</li>
+</ul>
+
+<section id="home">
+  <div id="kartu"></div>
+</section>
+
+<section id="belajar" class="hidden">
+  <div class="learning__lessonsStepsNav">
+    <section id="learning__dropDownListTitleW_lessons" class="learning__dropDownListTitleW"><div class="learning__dropDownListTitle"></div></section>
+    <section id="learning__dropDownListW_lessons" class="learning__dropDownListW hidden"><div class="learning__dropDownList_items"></div></section>
+    <section id="learning__dropDownListTitleW_steps" class="learning__dropDownListTitleW"><div class="learning__dropDownListTitle"></div></section>
+    <section id="learning__dropDownListW_steps" class="learning__dropDownListW hidden"><div class="learning__dropDownList_items"></div></section>
+  </div>
+  <div id="petunjuk" class="learning__headerIW"></div>
+  <main id="area"></main>
+  <p id="reminder" class="hidden">Reminder: jawab dulu.</p>
+  <ul>
+    <li id="SeeAnswer">See Answer</li>
+    <li id="CheckAnswer">Check Answer</li>
+  </ul>
+  <a class="tasksBtnext" href="javascript:void(0)">Next</a>
+  <div id="nav"></div>
+</section>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const params = new URLSearchParams(location.search);
+const skenario = params.get("skenario");
+window.seeAnswerKlik = 0;
+window.testDikerjakan = 0;  // klik jawaban di step Test (bot tidak boleh menyentuhnya)
+
+// Satu unit berdata: nama step tidak seragam antar lesson, seperti situs asli.
+const lessons = [
+  {nama: "1. Sports", steps: [{nama: "1. Explore", tugas: 1}, {nama: "2. Practice ", tugas: 2}, {nama: "3. Test", tugas: 2}]},
+  {nama: "2. Swimming", steps: [{nama: "1. Prepare", tugas: 1}, {nama: "2. Practice ", tugas: 1}, {nama: "3. Test", tugas: 1}]},
+  {nama: "3. Review", steps: [{nama: "1. Practice ", tugas: 2}]},
+];
+const halaman = [];  // urutan datar: intro tiap step (t = -1), lalu tugas-tugasnya
+lessons.forEach((L, l) => L.steps.forEach((S, s) => {
+  halaman.push({l, s, t: -1});
+  for (let t = 0; t < S.tugas; t++) halaman.push({l, s, t});
+}));
+const selesai = new Set();
+window.selesaiJumlah = () => selesai.size;
+let p = 0;
+
+function statusStep(l, s) {
+  const n = lessons[l].steps[s].tugas;
+  let sudah = 0;
+  for (let t = 0; t < n; t++) if (selesai.has(`${l}.${s}.${t}`)) sudah += 1;
+  return sudah === n ? "done" : sudah === 0 ? "notStarted" : "inProgress";
+}
+function statusLesson(l) {
+  const st = lessons[l].steps.map((_, s) => statusStep(l, s));
+  return st.every((x) => x === "done") ? "done" : st.every((x) => x === "notStarted") ? "notStarted" : "inProgress";
+}
+const unitSelesai = () => lessons.every((_, l) => statusLesson(l) === "done");
+
+function gambarHome() {
+  const semua = skenario === "semua";
+  $("#kartu").innerHTML =
+    `<div class="home__unitIW" id="home__unitIW_0"><div class="home__statusW">Completed!</div><div class="home__details">1\nBuying</div></div>` +
+    `<div class="home__unitIW" id="home__unitIW_1"><div class="home__statusW">${semua || unitSelesai() ? "Completed!" : ""}</div><div class="home__details">2\nSports</div></div>`;
+  document.querySelectorAll(".home__unitIW").forEach((k, n) => k.addEventListener("click", () => {
+    if (n === 1) tampil("belajar");
+  }));
+}
+function tampil(layar) {
+  $("#home").classList.toggle("hidden", layar !== "home");
+  $("#belajar").classList.toggle("hidden", layar !== "belajar");
+  if (layar === "home") gambarHome(); else { $("#area").innerHTML = ""; setTimeout(gambar, 300); }
+}
+
+function daftar(jenis) {
+  const cur = halaman[p];
+  const item = jenis === "lessons"
+    ? lessons.map((x, l) => ({nama: x.nama, st: statusLesson(l), cur: l === cur.l}))
+    : lessons[cur.l].steps.map((x, s) => ({nama: x.nama, st: statusStep(cur.l, s), cur: s === cur.s}));
+  const kotak = $(`#learning__dropDownListW_${jenis} .learning__dropDownList_items`);
+  kotak.innerHTML = item.map((i) =>
+    `<div class="learning__dropDownList_item${i.cur ? " learning__dropDownList_item--current" : ""}">` +
+    `<div class="learning__dropDownList_itemName"><div class="learning__dropDownList_itemNameText">${i.nama}</div></div>` +
+    (skenario === "statuskosong" ? "" :
+      `<div class="learning__dropDownList_itemProgress"><div class="progressBar__progress progressBar__progress--${i.st}"><span class="progressBar__tooltip">${i.st}</span></div></div>`) +
+    `</div>`).join("");
+  kotak.querySelectorAll(".learning__dropDownList_item").forEach((el, n) => el.addEventListener("click", () => {
+    p = halaman.findIndex((h) => h.t === -1 && (jenis === "lessons" ? (h.l === n && h.s === 0) : (h.l === cur.l && h.s === n)));
+    $(`#learning__dropDownListW_${jenis}`).classList.add("hidden");
+    $("#area").innerHTML = "";
+    setTimeout(gambar, 300);
+  }));
+}
+["lessons", "steps"].forEach((jenis) => $(`#learning__dropDownListTitleW_${jenis}`).addEventListener("click", () => {
+  $(`#learning__dropDownListW_${jenis}`).classList.toggle("hidden");
+}));
+
+function gambarNav() {
+  const cur = halaman[p], n = lessons[cur.l].steps[cur.s].tugas;
+  let h = `<span class="learning__tasksNav_pager_intro${cur.t === -1 ? " learning__tasksNav_task--current" : ""}" id="learning__tasksNav_pager_intro"></span>`;
+  for (let t = 0; t < n; t++) {
+    h += `<span class="learning__tasksNav_task${t === cur.t ? " learning__tasksNav_task--current" : ""}` +
+         `${selesai.has(`${cur.l}.${cur.s}.${t}`) ? " learning__tasksNav_task--done" : ""}"></span>`;
+  }
+  $("#nav").innerHTML = h;
+}
+function gambar() {
+  const cur = halaman[p];
+  $("#reminder").classList.add("hidden");
+  const tl = $("#learning__dropDownListTitleW_lessons .learning__dropDownListTitle");
+  tl.title = tl.textContent = `Lesson ${lessons[cur.l].nama}`;
+  if (skenario !== "tanpajudul") {
+    const ts = $("#learning__dropDownListTitleW_steps .learning__dropDownListTitle");
+    ts.title = ts.textContent = `Step ${lessons[cur.l].steps[cur.s].nama}`;
+  } else {
+    $("#learning__dropDownListTitleW_steps").remove();
+  }
+  daftar("lessons"); if ($("#learning__dropDownListW_steps")) daftar("steps");
+  if (cur.t === -1) {
+    $("#petunjuk").textContent = "";
+    $("#area").innerHTML = `<h1>${lessons[cur.l].steps[cur.s].nama}</h1><p>Intro step.</p>`;
+  } else {
+    $("#petunjuk").textContent = "Choose the correct answer.";
+    $("#area").innerHTML = [1, 2, 3].map((n) =>
+      `<div class="prMCQ__answers"><input type="radio" class="layout__radio" id="question-1_answer-${n}" name="question-1_answer-${n}"> Opsi ${n}</div>`).join("");
+    document.querySelectorAll("input.layout__radio").forEach((r) => r.addEventListener("click", () => {
+      if (/Test/.test(lessons[cur.l].steps[cur.s].nama)) window.testDikerjakan += 1;
+    }));
+  }
+  gambarNav();
+}
+
+$("#sitemenu__itemHome").addEventListener("click", () => tampil("home"));
+document.querySelectorAll("#settingsMenu__dictionary, #settingsMenu__help").forEach((li) => li.addEventListener("click", () => {
+  document.querySelectorAll("li.settingsMenu__listCat").forEach((x) => x.classList.replace("settingsMenu__listCat--open", "settingsMenu__listCat--closed"));
+  li.classList.replace("settingsMenu__listCat--closed", "settingsMenu__listCat--open");
+}));
+$("#SeeAnswer").addEventListener("click", () => { window.seeAnswerKlik += 1; });
+$("#CheckAnswer").addEventListener("click", () => {
+  const cur = halaman[p];
+  const benar = cur.t >= 0 && document.querySelector("input.layout__radio:checked");
+  $("#reminder").classList.toggle("hidden", !!benar);
+  if (benar) { selesai.add(`${cur.l}.${cur.s}.${cur.t}`); gambarNav(); daftar("lessons"); daftar("steps"); }
+});
+// Setelah Next, halaman dikosongkan dulu lalu dirender 300 ms kemudian (seperti Angular di situs asli).
+$(".tasksBtnext").addEventListener("click", () => {
+  if (p < halaman.length - 1) { p += 1; $("#area").innerHTML = ""; setTimeout(gambar, 300); }
+});
+
+if (params.get("mulai") === "area") tampil("belajar"); else tampil("home");
+</script>
+</body>
+</html>

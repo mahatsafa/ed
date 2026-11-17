@@ -62,6 +62,14 @@ Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 - Belum ada: soal huruf kosong, kolom teks, dan tombol mikrofon asli (selector belum terekam).
 Diuji di `mock_real.html`, halaman tiruan dengan selector situs asli.
 
+Auto-navigasi (`jalankan_pelajaran`): mulai dari dashboard (atau area belajar), buka unit pertama
+yang belum "Completed!", lalu lesson dan step pertama yang belum selesai (status dari dropdown:
+`progressBar__progress--done/inProgress/notStarted`), kerjakan halaman + Next, ulangi sampai semua
+unit selesai. Layar intro step langsung di-Next. **Step bernama Test/Quiz/Exam tidak pernah dikerjakan
+bot** (dikerjakan pemilik akun sendiri); judul step tak terbaca dianggap Test. Berhenti kalau
+jenis soal tak dikenal atau tidak ada kemajuan. Diuji di `mock_kursus.html` (tiruan dashboard + area
+belajar); belum dijalankan di situs asli.
+
 ### login.py
 - `SELECTORS`: daftar selector tiap target. Target `real` masih kosong (menunggu HTML
   dari form login asli), jadi bot berhenti dan tidak menebak.

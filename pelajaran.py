@@ -10,7 +10,7 @@ import re
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import expect
 
-from helpers import TIMEOUT_MS, click, periksa, screenshot_on_fail, setup_logger
+from helpers import TIMEOUT_MS, click, periksa, screenshot_on_fail, setup_logger, wait_visible
 
 SEL = {
     "instruksi": ".learning__headerIW",  # kalimat instruksi di atas soal
@@ -29,7 +29,16 @@ SEL = {
     "cek": "#CheckAnswer",
     "next": "a.tasksBtnext",
     "selesai": ".learning__tasksNav_task--done",
+    "kartu_unit": ".home__unitIW",  # kartu unit di dashboard; teks "Completed!" kalau unit selesai
+    "rumah": "#sitemenu__itemHome",  # ikon rumah di header area belajar
+    "intro": ".learning__tasksNav_pager_intro.learning__tasksNav_task--current",  # layar intro step
+    "item_daftar": ".learning__dropDownList_item",
 }
+# Step yang dikerjakan manual oleh pemilik akun (bernilai); bot tidak menyentuhnya.
+STEP_MANUAL = re.compile(r"\b(Test|Quiz|Exam)\b", re.I)
+MAX_UNIT = 60  # batas unit yang dicoba per jalan
+MAX_STEP = 400  # batas (lesson, step) yang dikerjakan per jalan
+MAX_TOTAL_HALAMAN = 3000  # batas halaman soal per jalan
 HEADER_ASLI = ("settingsMenu__dictionary", "settingsMenu__help")  # dua tombol header yang diklik
 MAX_HALAMAN = 30  # batas halaman per jalan
 # Instruksi soal yang belum didukung bot: berhenti, jangan lompat ke Next tanpa menjawab.
@@ -228,19 +237,169 @@ def lanjut(page, timeout=TIMEOUT_MS):
     return True
 
 
-def jalankan_pelajaran(page, maks=MAX_HALAMAN, timeout=TIMEOUT_MS):
+def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS):
+    """Kerjakan halaman satu per satu lalu Next. Kembalikan alasan berhenti:
+    "habis" (Next tidak mengubah halaman), "test" (step Test, dikerjakan manual), "batas"."""
     log = setup_logger()
-    ringkasan = {"halaman": 0, "tak_terverifikasi": 0}
-    while ringkasan["halaman"] < maks:
+    mulai = ringkasan["halaman"]
+    while ringkasan["halaman"] - mulai < maks:
         ringkasan["halaman"] += 1
         log.info("== Halaman %d", ringkasan["halaman"])
         tunggu_stabil(page)
-        kerjakan_halaman(page, ringkasan, timeout)
+        if sedang_test(page):
+            ringkasan["halaman"] -= 1
+            log.info("Step Test (dikerjakan manual): berhenti di sini, tidak disentuh.")
+            return "test"
+        if page.locator(SEL["intro"]).count():
+            log.info("Layar intro step: langsung Next")
+        else:
+            kerjakan_halaman(page, ringkasan, timeout)
         if not lanjut(page, timeout):
-            log.info("Next tidak mengubah halaman: pelajaran selesai.")
+            log.info("Next tidak mengubah halaman.")
+            return "habis"
+    log.warning("Batas %d halaman tercapai, berhenti.", maks)
+    return "batas"
+
+
+def ada_area(page):
+    return page.locator("#learning__dropDownListTitleW_lessons").count() > 0
+
+
+def ada_dashboard(page):
+    return page.locator(SEL["kartu_unit"]).count() > 0
+
+
+def judul(page, jenis):
+    """Judul lesson/step yang sedang dibuka ("lessons" atau "steps"); kosong kalau tak terbaca."""
+    el = page.locator(f"#learning__dropDownListTitleW_{jenis} .learning__dropDownListTitle")
+    return (el.first.get_attribute("title", timeout=2000) or "").strip() if el.count() else ""
+
+
+def sedang_test(page):
+    """Di area belajar, step bernama Test/Quiz/Exam? Judul tak terbaca = anggap Test (gagal tertutup)."""
+    if not ada_area(page):
+        return False
+    nama = judul(page, "steps")
+    return not nama or bool(STEP_MANUAL.search(nama))
+
+
+JS_DAFTAR = """(jenis) => [...document.querySelectorAll(
+    `#learning__dropDownListW_${jenis} .learning__dropDownList_item`)].map(el => {
+  const p = el.querySelector('[class*="progressBar__progress--"]');
+  const m = p && p.className.match(/progressBar__progress--(done|inProgress|notStarted)\\b/);
+  const n = el.querySelector('.learning__dropDownList_itemNameText') || el;
+  return {nama: n.textContent.trim(), status: m ? m[1] : null,
+          sekarang: el.classList.contains('learning__dropDownList_item--current')};
+})"""
+
+
+def baca_daftar(page, jenis, timeout=TIMEOUT_MS):
+    """Daftar lesson/step beserta status (done/inProgress/notStarted). Status tak dikenal = berhenti."""
+    try:  # daftar dirender belakangan (Angular): tunggu ada item dulu, jangan membaca daftar kosong
+        page.locator(f"#learning__dropDownListW_{jenis} {SEL['item_daftar']}").first.wait_for(
+            state="attached", timeout=timeout)
+    except PWTimeout:
+        pass  # kosong tetap ditolak di bawah, lengkap dengan screenshot
+    hasil = page.evaluate(JS_DAFTAR, jenis)
+    if not hasil or any(h["status"] is None for h in hasil):
+        screenshot_on_fail(page, f"daftar_{jenis}_tak_terbaca")
+        raise JenisSoalTidakDikenal(f"Daftar {jenis} kosong atau status progres tak terbaca.")
+    return hasil
+
+
+def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
+    """Buka dropdown lesson/step, klik item ke-`indeks`, tunggu item itu jadi yang aktif."""
+    daftar = page.locator(f"#learning__dropDownListW_{jenis}")
+    item = daftar.locator(SEL["item_daftar"]).nth(indeks)
+    if not daftar.is_visible():
+        click(page, page.locator(f"#learning__dropDownListTitleW_{jenis}"), f"buka_daftar_{jenis}", timeout)
+    wait_visible(page, item, f"item_{jenis}_{indeks + 1}", timeout)
+    sudah_aktif = "--current" in (item.get_attribute("class") or "")
+    if not sudah_aktif:
+        click(page, item.locator(".learning__dropDownList_itemName"), f"pilih_{jenis}_{indeks + 1}", timeout)
+        periksa(page, f"{jenis}_{indeks + 1}_aktif", lambda: expect(item).to_have_class(
+            re.compile(r"--current"), timeout=timeout))
+    if daftar.is_visible():  # daftar masih terbuka: tutup supaya tidak menutupi soal
+        click(page, page.locator(f"#learning__dropDownListTitleW_{jenis}"), f"tutup_daftar_{jenis}", timeout)
+    tunggu_stabil(page)
+
+
+def cari_target(page, dilewati, timeout=TIMEOUT_MS):
+    """Cari (lesson, indeks step, nama step) pertama yang belum selesai dan bukan step manual.
+    Lesson yang hanya tersisa step manual dicatat di `dilewati` (per unit). Tidak ada = None."""
+    for li, lesson in enumerate(baca_daftar(page, "lessons")):  # batas atas = jumlah lesson
+        if lesson["status"] == "done" or lesson["nama"] in dilewati:
+            continue
+        pilih_item(page, "lessons", li, timeout)
+        for si, step in enumerate(baca_daftar(page, "steps")):  # batas atas = jumlah step
+            if step["status"] != "done" and not STEP_MANUAL.search(step["nama"]):
+                return lesson["nama"], si, step["nama"]
+        dilewati.add(lesson["nama"])
+    return None
+
+
+def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS):
+    """Dari area belajar: pilih lesson pertama yang belum selesai, lalu step pertama yang belum selesai
+    (bukan Test), dan tunggu halaman pertamanya siap. None kalau unit ini habis."""
+    log = setup_logger()
+    target = cari_target(page, dilewati, timeout)
+    if target is None:
+        return None
+    if target in dicoba:  # sudah pernah dikerjakan tapi status belum selesai: jangan berputar-putar
+        screenshot_on_fail(page, "tidak_ada_kemajuan")
+        raise RuntimeError(f"Tidak ada kemajuan: {target} dipilih lagi padahal sudah dikerjakan.")
+    dicoba.add(target)
+    lesson, si, step = target
+    log.info("Target: lesson %r, step %r", lesson, step)
+    pilih_item(page, "steps", si, timeout)
+    return target
+
+
+def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
+    """Dari dashboard: klik unit pertama yang belum "Completed!" dan belum dicoba. False kalau tak ada."""
+    kartu = page.locator(SEL["kartu_unit"])
+    wait_visible(page, kartu.first, "kartu_unit", timeout)
+    for n in range(min(kartu.count(), MAX_UNIT)):  # batas atas = jumlah kartu
+        if n in unit_dicoba or "Completed!" in kartu.nth(n).inner_text():
+            continue
+        unit_dicoba.add(n)
+        setup_logger().info("Buka unit ke-%d: %s", n + 1, kartu.nth(n).inner_text().replace("\n", " ")[:50])
+        click(page, kartu.nth(n), f"kartu_unit_{n + 1}", timeout)
+        wait_visible(page, page.locator("#learning__dropDownListTitleW_lessons"), "area_belajar", timeout)
+        tunggu_stabil(page)
+        return True
+    return False
+
+
+def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
+    click(page, page.locator(SEL["rumah"]), "ikon_rumah", timeout)
+    wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", timeout)
+
+
+def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN):
+    """Mulai dari dashboard (atau area belajar), kerjakan lesson demi lesson sampai semua unit
+    selesai, kecuali step Test yang dikerjakan manual. Berhenti kalau ada jenis soal tak dikenal."""
+    log = setup_logger()
+    ringkasan = {"halaman": 0, "tak_terverifikasi": 0}
+    unit_dicoba, langkah = set(), 0
+    if not ada_dashboard(page) and not ada_area(page):
+        screenshot_on_fail(page, "bukan_dashboard_atau_area")
+        raise JenisSoalTidakDikenal(f"Bukan dashboard atau area belajar: {page.url.split('?')[0]}")
+    while True:
+        if ada_dashboard(page) and not buka_unit(page, unit_dicoba, timeout):
+            log.info("Semua unit selesai (selain step Test).")
             break
-    else:
-        log.warning("Batas %d halaman tercapai, berhenti.", maks)
+        dilewati, dicoba = set(), set()  # nama lesson berulang antar unit, jadi dicatat per unit
+        while True:
+            langkah += 1
+            if langkah > MAX_STEP or ringkasan["halaman"] >= maks_halaman:
+                log.warning("Batas langkah/halaman tercapai, berhenti.")
+                klik_header(page, timeout)
+                return ringkasan
+            if buka_lesson_berikutnya(page, dilewati, dicoba, timeout) is None:
+                break
+            kerjakan_berurutan(page, ringkasan, maks_halaman - ringkasan["halaman"], timeout)
+        kembali_ke_dashboard(page, timeout)
     klik_header(page, timeout)  # terakhir, supaya modal dari menu Help tidak menghalangi soal
     log.info("Ringkasan: %s", ringkasan)
     return ringkasan
