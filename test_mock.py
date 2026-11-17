@@ -137,11 +137,11 @@ with sync_playwright() as pw:
     page.goto(URL_ASLI)
     ring, alasan = berurutan(page)
     pelajaran.klik_header(page, 4000)
-    check("pelajaran: 5 halaman dikerjakan, berhenti di halaman terakhir, semua terverifikasi",
-          ring == {"halaman": 5, "tak_terverifikasi": 0} and alasan == "habis")
+    check("pelajaran: 6 halaman dikerjakan, berhenti di halaman terakhir, semua terverifikasi",
+          ring == {"halaman": 6, "tak_terverifikasi": 0} and alasan == "habis")
     check("pelajaran: See Answer tidak pernah diklik", page.evaluate("() => window.seeAnswerKlik") == 0)
-    check("pelajaran: 5 tugas tercatat selesai",
-          page.locator(".learning__tasksNav_task--done").count() == 5)
+    check("pelajaran: 6 tugas tercatat selesai",
+          page.locator(".learning__tasksNav_task--done").count() == 6)
     check("pelajaran: modal Video Tutorials dari Help ditutup", page.locator("ngb-modal-window").count() == 0)
     check("pelajaran: Dictionary lalu Help sudah diklik (Help terbuka)", "settingsMenu__listCat--open" in
           page.locator("#settingsMenu__help").get_attribute("class"))
@@ -149,9 +149,37 @@ with sync_playwright() as pw:
 
     page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=drag")
-    check("pelajaran: soal 'Drag ...' -> berhenti, tidak melompat ke Next",
+    ring, alasan = berurutan(page)
+    check("pelajaran: soal 'Drag ...' (cloze) dikerjakan: 3 kotak terisi, terverifikasi, See Answer nol",
+          ring == {"halaman": 1, "tak_terverifikasi": 0} and alasan == "habis"
+          and page.locator(".prCLZ__regContainer .dnditem").count() == 3
+          and page.locator(".learning__tasksNav_task--done").count() == 1
+          and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=cocok")
+    ring, alasan = berurutan(page)
+    check("pelajaran: pencocokan dikerjakan: 3 baris terisi, terverifikasi, See Answer nol",
+          ring == {"halaman": 1, "tak_terverifikasi": 0} and alasan == "habis"
+          and page.locator(".prMT_T2T__regContainer .dnditem").count() == 3
+          and page.locator(".learning__tasksNav_task--done").count() == 1
+          and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=mikrofon")
+    check("pelajaran: soal suara (webRtc) -> berhenti, 0 opsi diklik, tidak selesai",
           raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)
-          and page.locator("#petunjuk").inner_text() == "Drag the correct answer."
+          and page.evaluate("() => window.opsiKlik") == 0
+          and page.locator(".learning__tasksNav_task--done").count() == 0)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=teksbebas")
+    check("pelajaran: isian teks (textarea, instruksi tanpa 'Type') -> berhenti, tidak melompat",
+          raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)
+          and page.locator("#ta").input_value() == ""
           and page.locator(".learning__tasksNav_task--done").count() == 0)
     page.close()
 

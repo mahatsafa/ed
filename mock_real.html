@@ -42,9 +42,13 @@
 <script>
 const params = new URLSearchParams(location.search);
 const skenario = params.get("skenario");
-let tugas = ["video", "pilihan", "dropdown", "cloze", "bicara"];
+let tugas = ["video", "pilihan", "dropdown", "cloze", "cocok", "bicara"];
 if (skenario === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak dikenal bot
-if (skenario === "drag") tugas = ["drag", "pilihan"];  // video + soal seret (tidak didukung)
+if (skenario === "drag") tugas = ["cloze"];  // hanya soal seret "Drag ..." (cloze)
+if (skenario === "cocok") tugas = ["cocok"];  // hanya soal pencocokan
+if (skenario === "mikrofon") tugas = ["mikrofon"];  // soal suara (webRtc): belum didukung
+if (skenario === "teksbebas") tugas = ["teksbebas"];  // textarea tanpa kata "Type" di instruksi
+window.opsiKlik = 0;
 if (skenario === "kosong") tugas = ["kosong"];  // tidak ada kontrol soal yang dikenal
 if (skenario === "dropdown") tugas = ["dropdown"];  // hanya soal dropdown kustom
 if (skenario === "pilihan") tugas = ["pilihan"];  // hanya soal pilihan ganda (2 pertanyaan)
@@ -89,10 +93,24 @@ function gambar() {
   if (jenis === "video") {
     $("#petunjuk").textContent = "Watch the video.";
     pasangVideo(area);
-  } else if (jenis === "drag") {
-    $("#petunjuk").textContent = "Drag the correct answer.";
-    pasangVideo(area);
-    area.insertAdjacentHTML("beforeend", '<p>It ___ at 10 A.M. <span class="seret">comes</span></p>');
+  } else if (jenis === "mikrofon") {
+    $("#petunjuk").textContent = "What's the best response to the statement?";
+    area.innerHTML = '<div class="answersWrapper mcq webRtc"><div class="lessonMultipleAnswer">Why not?</div>' +
+      '<div class="lessonMultipleAnswer">Let\'s go!</div></div>';
+    area.querySelectorAll(".lessonMultipleAnswer").forEach((e) => e.addEventListener("click", () => { window.opsiKlik += 1; }));
+  } else if (jenis === "teksbebas") {
+    $("#petunjuk").textContent = "Answer the question.";
+    area.innerHTML = '<textarea id="ta" rows="2" cols="30"></textarea>';
+  } else if (jenis === "cocok") {
+    $("#petunjuk").textContent = "Listen to the sports report, and then find each player's sport.";
+    const baris = ["Sam", "Bill", "Jacques"].map((nama, n) =>
+      `<div class="prMT_T2T__answersRow"><span class="prMT_T2T__answersText">${nama}</span>` +
+      `<div class="prMT_T2T__regContainer" style="display:inline-block;margin:4px"><div class="dndZone" id="m_${n}" style="min-width:90px;min-height:28px;border-bottom:2px solid #000"></div></div></div>`).join("");
+    const kata = ["soccer", "baseball", "tennis", "golf"].map((w) =>
+      `<div class="dnditem draggable" style="display:inline-block;margin:4px;padding:4px;border:1px solid #888;user-select:none">${w}</div>`).join("");
+    area.innerHTML = `<div class="prMT_T2T__answersWrapper">${baris}</div>` +
+      `<div class="prMT_T2T__wordsBankWrapper" id="bankContainer"><div class="dndZone" id="bank_9">${kata}</div></div>`;
+    pasangSeret();
   } else if (jenis === "pilihan") {
     $("#petunjuk").textContent = "Choose the best answer.";
     area.innerHTML = [[1, 2, 3], [4, 5, 6]].map((ids, q) =>
@@ -121,7 +139,7 @@ function gambar() {
       });
     });
   } else if (jenis === "cloze") {
-    $("#petunjuk").textContent = "Read the interview, and fill in the missing words.";
+    $("#petunjuk").textContent = "Drag the correct answer/s into place.";
     const kotak = [0, 1, 2].map((n) =>
       `<div class="prCLZ__regContainer" style="display:inline-block;margin:4px"><div class="dndZone" id="0_${n}" style="min-width:90px;min-height:28px;border-bottom:2px solid #000"></div></div>`).join(" . ");
     const kata = ["teach", "agency", "need", "working"].map((w) =>
@@ -194,7 +212,8 @@ $("#CheckAnswer").addEventListener("click", () => {
                     .every((s) => s.querySelector("input.layout__radio:checked"))) ||
                 (jenis === "dropdown" && [...document.querySelectorAll(".DDLOptions__selected")]
                     .every((e) => e.textContent.trim() !== "")) ||
-                (jenis === "cloze" && document.querySelectorAll(".prCLZ__regContainer .dnditem").length === 3);
+                (jenis === "cloze" && document.querySelectorAll(".prCLZ__regContainer .dnditem").length === 3) ||
+                (jenis === "cocok" && document.querySelectorAll(".prMT_T2T__regContainer .dnditem").length === 3);
   $("#reminder").classList.toggle("hidden", !!benar);
   if (benar) tandaiSelesai();
 });

@@ -28,6 +28,9 @@ SEL = {
     "cloze_kotak": ".prCLZ__regContainer .dndZone",  # kotak kosong
     "cloze_kata": ".prCLZ__wordsBankWrapper .dnditem",  # kata di bank
     "kata_terisi": ".dnditem",
+    "cocok_kotak": ".prMT_T2T__regContainer .dndZone",  # kotak jawaban tiap baris pencocokan
+    "cocok_kata": ".prMT_T2T__wordsBankWrapper .dnditem",  # kata di bank pencocokan
+    "webrtc": ".answersWrapper.webRtc",  # soal dengan pengenalan suara (butuh mikrofon)
     "start": ".speakingInteractButtonWrapper a.continue",
     "start_nonaktif": ".speakingInteractButtonWrapper .continueWrapper.disable",
     "cek": "#CheckAnswer",
@@ -46,7 +49,11 @@ MAX_TOTAL_HALAMAN = 3000  # batas halaman soal per jalan
 HEADER_ASLI = ("settingsMenu__dictionary", "settingsMenu__help")  # dua tombol header yang diklik
 MAX_HALAMAN = 30  # batas halaman per jalan
 # Instruksi soal yang belum didukung bot: berhenti, jangan lompat ke Next tanpa menjawab.
-TIDAK_DIDUKUNG = re.compile(r"^\s*(Drag|Type|Write|Fill|Match|Put|Record|Say|Speak|Order)\b")
+# (Drag dan Match sudah punya handler: cloze dan pencocokan.)
+TIDAK_DIDUKUNG = re.compile(r"^\s*(Type|Write|Fill|Put|Record|Say|Speak|Order)\b")
+# Isian teks bebas yang terlihat di luar panel Dictionary: belum ada handler.
+JS_ISIAN_TEKS = """() => [...document.querySelectorAll('textarea, [contenteditable=true], input[type=text]')]
+    .some(e => !e.closest('#DictionaryPanelContainer') && e.offsetParent !== null)"""
 MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 TEKS_HALAMAN = "() => document.body.innerText.replace(/\\d/g, '')"  # angka dibuang (waktu video)
@@ -197,6 +204,15 @@ def isi_seret(page, sel_kotak, sel_kata, nama, timeout=TIMEOUT_MS):
     return True
 
 
+def elemen_belum_didukung(page):
+    """Nama elemen soal tanpa handler (suara, isian teks) kalau ada di halaman; kalau tidak, None."""
+    if page.locator(SEL["webrtc"]).count():
+        return "suara (webRtc)"
+    if page.evaluate(JS_ISIAN_TEKS):
+        return "isian teks"
+    return None
+
+
 def klik_start(page, timeout=TIMEOUT_MS):
     start = page.locator(SEL["start"])
     if not start.count():
@@ -225,9 +241,13 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     log = setup_logger()
     instruksi = page.locator(SEL["instruksi"])
     teks = instruksi.first.inner_text().strip() if instruksi.count() else ""
-    if TIDAK_DIDUKUNG.match(teks):  # instruksi (mis. "Drag ...") yang belum bisa dikerjakan bot
+    if TIDAK_DIDUKUNG.match(teks):  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
         screenshot_on_fail(page, "instruksi_belum_didukung")
         raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks[:60]!r}")
+    belum = elemen_belum_didukung(page)  # sebelum mengklik apa pun
+    if belum:
+        screenshot_on_fail(page, "elemen_belum_didukung")
+        raise JenisSoalTidakDikenal(f"Elemen soal belum didukung: {belum}")
     sebelum = page.locator(SEL["selesai"]).count()
     dikerjakan, perlu_cek = [], False
     if putar_video(page, timeout):
@@ -240,6 +260,9 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
         perlu_cek = True
     if isi_seret(page, SEL["cloze_kotak"], SEL["cloze_kata"], "cloze", timeout):
         dikerjakan.append("isian kata")
+        perlu_cek = True
+    if isi_seret(page, SEL["cocok_kotak"], SEL["cocok_kata"], "pencocokan", timeout):
+        dikerjakan.append("pencocokan")
         perlu_cek = True
     if klik_start(page, timeout):
         dikerjakan.append("start")
