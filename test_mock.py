@@ -167,6 +167,26 @@ with sync_playwright() as pw:
     page.close()
 
     page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=pilihan")
+    page.wait_for_selector(".prMCQ__qaSet")
+    check("pilihan: tiap pertanyaan (2) tepat satu terpilih, opsi pertama, See Answer nol",
+          pelajaran.pilih_radio(page, 4000) is True
+          and page.locator(".prMCQ__qaSet").count() == 2
+          and page.evaluate("() => [...document.querySelectorAll('.prMCQ__qaSet')]"
+                            ".map(s => [...s.querySelectorAll('input:checked')].map(i => i.id))")
+          == [["question-1_answer-1"], ["question-2_answer-4"]]
+          and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=radioluar")
+    page.wait_for_selector("input.layout__radio")
+    check("pilihan: radio di luar .prMCQ__qaSet -> berhenti, tidak ada yang diklik",
+          raises(lambda: pelajaran.pilih_radio(page, 2000), pelajaran.JenisSoalTidakDikenal)
+          and page.locator("input:checked").count() == 0)
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=kosong")
     check("pelajaran: select milik panel Dictionary tidak dianggap soal -> halaman tak dikenal",
           raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)

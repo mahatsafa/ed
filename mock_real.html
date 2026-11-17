@@ -47,6 +47,8 @@ if (skenario === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak d
 if (skenario === "drag") tugas = ["drag", "pilihan"];  // video + soal seret (tidak didukung)
 if (skenario === "kosong") tugas = ["kosong"];  // tidak ada kontrol soal yang dikenal
 if (skenario === "dropdown") tugas = ["dropdown"];  // hanya soal dropdown kustom
+if (skenario === "pilihan") tugas = ["pilihan"];  // hanya soal pilihan ganda (2 pertanyaan)
+if (skenario === "radioluar") tugas = ["radioluar"];  // radio di luar .prMCQ__qaSet (tak bisa dikelompokkan)
 let i = 0;
 const selesai = new Set();
 window.seeAnswerKlik = 0;
@@ -93,8 +95,13 @@ function gambar() {
     area.insertAdjacentHTML("beforeend", '<p>It ___ at 10 A.M. <span class="seret">comes</span></p>');
   } else if (jenis === "pilihan") {
     $("#petunjuk").textContent = "Choose the best answer.";
-    area.innerHTML = [1, 2, 3, 4].map((n) =>
-      `<div class="prMCQ__answers"><input type="radio" class="layout__radio" id="question-1_answer-${n}" name="q1"> Opsi ${n}</div>`).join("");
+    area.innerHTML = [[1, 2, 3], [4, 5, 6]].map((ids, q) =>
+      `<div class="prMCQ__qaSet"><div class="prMCQ__questionText">Pertanyaan ${q + 1}?</div>` + ids.map((n) =>
+        `<div class="prMCQ__answers"><input type="radio" class="layout__radio" id="question-${q + 1}_answer-${n}" name="question-${q + 1}_answer-${n}">` +
+        `<label class="prMCQ__answerLabel" for="question-${q + 1}_answer-${n}">Opsi ${n}</label></div>`).join("") + "</div>").join("");
+  } else if (jenis === "radioluar") {
+    $("#petunjuk").textContent = "Choose the best answer.";
+    area.innerHTML = '<input type="radio" class="layout__radio" id="r1" name="r1"><label for="r1">Opsi</label>';
   } else if (jenis === "dropdown") {
     $("#petunjuk").textContent = "Select the correct answer from the drop-down list.";
     // Dropdown kustom seperti situs asli: daftar muncul di dalam wrapper saat diklik, hilang setelah memilih.
@@ -183,7 +190,8 @@ document.querySelectorAll("header li").forEach((li) => li.addEventListener("clic
 $("#SeeAnswer").addEventListener("click", () => { window.seeAnswerKlik += 1; });
 $("#CheckAnswer").addEventListener("click", () => {
   const jenis = tugas[i];
-  const benar = (jenis === "pilihan" && document.querySelector("input.layout__radio:checked")) ||
+  const benar = (jenis === "pilihan" && [...document.querySelectorAll(".prMCQ__qaSet")]
+                    .every((s) => s.querySelector("input.layout__radio:checked"))) ||
                 (jenis === "dropdown" && [...document.querySelectorAll(".DDLOptions__selected")]
                     .every((e) => e.textContent.trim() !== "")) ||
                 (jenis === "cloze" && document.querySelectorAll(".prCLZ__regContainer .dnditem").length === 3);

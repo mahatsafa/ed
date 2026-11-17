@@ -139,8 +139,9 @@ function gambar() {
     $("#area").innerHTML = `<h1>${lessons[cur.l].steps[cur.s].nama}</h1><p>Intro step.</p>`;
   } else {
     $("#petunjuk").textContent = "Choose the correct answer.";
-    $("#area").innerHTML = [1, 2, 3].map((n) =>
-      `<div class="prMCQ__answers"><input type="radio" class="layout__radio" id="question-1_answer-${n}" name="question-1_answer-${n}"> Opsi ${n}</div>`).join("");
+    $("#area").innerHTML = '<div class="prMCQ__qaSet">' + [1, 2, 3].map((n) =>
+      `<div class="prMCQ__answers"><input type="radio" class="layout__radio" id="question-1_answer-${n}" name="question-1_answer-${n}">` +
+      `<label class="prMCQ__answerLabel" for="question-1_answer-${n}">Opsi ${n}</label></div>`).join("") + "</div>";
     document.querySelectorAll("input.layout__radio").forEach((r) => r.addEventListener("click", () => {
       if (/Test/.test(lessons[cur.l].steps[cur.s].nama)) window.testDikerjakan += 1;
     }));

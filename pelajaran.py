@@ -20,6 +20,7 @@ SEL = {
     "modal_tutup": "button.close, [aria-label=Close], .close",
     "video": "video",
     "radio": "input.layout__radio",
+    "mcq_set": ".prMCQ__qaSet",  # satu pertanyaan pilihan ganda (halaman bisa punya beberapa)
     "dropdown": ".prFITB__DDLOptionsW",  # dropdown kustom (bukan <select>)
     "dd_terpilih": ".DDLOptions__selected",
     "dd_daftar": ".DDLOptions__list",
@@ -97,12 +98,22 @@ def putar_video(page, timeout=TIMEOUT_MS):
 
 
 def pilih_radio(page, timeout=TIMEOUT_MS):
+    """Jawab tiap pertanyaan pilihan ganda dengan opsi pertama (klik label; input asli bisa tersembunyi)."""
     radios = page.locator(SEL["radio"])
     if not radios.count():
         return False
-    pertama = radios.first
-    click(page, pertama, "pilihan_jawaban_1", timeout)
-    periksa(page, "jawaban_terpilih", lambda: expect(pertama).to_be_checked(timeout=timeout))
+    himpunan = page.locator(SEL["mcq_set"])
+    if radios.count() != page.locator(f"{SEL['mcq_set']} {SEL['radio']}").count():
+        screenshot_on_fail(page, "radio_di_luar_set")  # radio yang tak bisa dikelompokkan: jangan menebak
+        raise JenisSoalTidakDikenal("Ada radio di luar .prMCQ__qaSet; pengelompokan pertanyaan tak jelas.")
+    for n in range(himpunan.count()):  # batas atas = jumlah pertanyaan
+        pertama = himpunan.nth(n).locator(SEL["radio"]).first
+        id_ = pertama.get_attribute("id", timeout=timeout)
+        if not id_:
+            screenshot_on_fail(page, f"radio_tanpa_id_{n + 1}")
+            raise JenisSoalTidakDikenal(f"Radio pertanyaan {n + 1} tanpa id; label tak bisa dicari.")
+        click(page, himpunan.nth(n).locator(f'label[for="{id_}"]'), f"pertanyaan_{n + 1}_pilihan_1", timeout)
+        periksa(page, f"pertanyaan_{n + 1}_terjawab", lambda r=pertama: expect(r).to_be_checked(timeout=timeout))
     return True
 
 
