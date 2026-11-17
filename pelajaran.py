@@ -119,16 +119,23 @@ def isi_dropdown(page, timeout=TIMEOUT_MS):
     return dikerjakan
 
 
+STABIL_JS = """([ambil, perlu]) => {
+  const t = eval(ambil)();
+  const k = window.__botStabil;
+  window.__botStabil = {t: t, n: k && k.t === t ? k.n + 1 : 0};
+  return window.__botStabil.n >= perlu;
+}"""
+
+
 def tunggu_stabil(page, jeda_ms=400, perlu=2, maks_baca=15):
-    """Tunggu teks halaman tidak berubah selama `perlu` pembacaan berturut-turut (render selesai)."""
-    sama, terakhir = 0, page.evaluate(TEKS_HALAMAN)
-    for _ in range(maks_baca):  # batas atas pembacaan
-        page.wait_for_timeout(jeda_ms)
-        sekarang = page.evaluate(TEKS_HALAMAN)
-        sama = sama + 1 if sekarang == terakhir else 0
-        terakhir = sekarang
-        if sama >= perlu:
-            return
+    """Tunggu teks halaman tidak berubah selama `perlu` pembacaan berturut-turut (render selesai).
+    Polling di sisi halaman (tanpa sleep di Python); batas atas = maks_baca x jeda_ms, lewat batas = lanjut."""
+    page.evaluate("() => { window.__botStabil = null; }")
+    try:
+        page.wait_for_function(STABIL_JS, arg=[TEKS_HALAMAN, perlu], polling=jeda_ms,
+                               timeout=jeda_ms * maks_baca)
+    except PWTimeout:
+        setup_logger().warning("Halaman belum stabil setelah %d ms, lanjut.", jeda_ms * maks_baca)
 
 
 def seret(page, sumber, tujuan, nama, timeout=TIMEOUT_MS):
@@ -148,9 +155,9 @@ def seret(page, sumber, tujuan, nama, timeout=TIMEOUT_MS):
     page.mouse.up()
 
 
-def isi_cloze(page, timeout=TIMEOUT_MS):
+def isi_seret(page, sel_kotak, sel_kata, nama, timeout=TIMEOUT_MS):
     """Isi tiap kotak kosong dengan kata dari bank (urutan bank; tanpa membaca kunci)."""
-    kotak = page.locator(SEL["cloze_kotak"])
+    kotak = page.locator(sel_kotak)
     jumlah = kotak.count()
     if not jumlah:
         return False
@@ -158,12 +165,12 @@ def isi_cloze(page, timeout=TIMEOUT_MS):
         satu = kotak.nth(k)
         if satu.locator(SEL["kata_terisi"]).count():
             continue  # sudah terisi
-        kata = page.locator(SEL["cloze_kata"])
+        kata = page.locator(sel_kata)
         if not kata.count():
-            screenshot_on_fail(page, "cloze_kata_habis")
+            screenshot_on_fail(page, f"{nama}_kata_habis")
             raise RuntimeError("Kata di bank habis sebelum semua kotak terisi.")
-        seret(page, kata.first, satu, f"kata_ke_kotak_{k + 1}", timeout)
-        periksa(page, f"kotak_{k + 1}_terisi", lambda s=satu: expect(
+        seret(page, kata.first, satu, f"{nama}_kata_ke_kotak_{k + 1}", timeout)
+        periksa(page, f"{nama}_kotak_{k + 1}_terisi", lambda s=satu: expect(
             s.locator(SEL["kata_terisi"])).to_have_count(1, timeout=timeout))
     return True
 
@@ -209,7 +216,7 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     if isi_dropdown(page, timeout):
         dikerjakan.append("dropdown")
         perlu_cek = True
-    if isi_cloze(page, timeout):
+    if isi_seret(page, SEL["cloze_kotak"], SEL["cloze_kata"], "cloze", timeout):
         dikerjakan.append("isian kata")
         perlu_cek = True
     if klik_start(page, timeout):
