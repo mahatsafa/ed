@@ -1,4 +1,5 @@
 """Uji otomatis di mock.html. Jalankan: python test_mock.py"""
+import json
 import signal
 import subprocess
 import sys
@@ -8,8 +9,9 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 from bot import URLS, load_credentials
-from helpers import LOG_DIR
+from helpers import LOG_DIR, setup_logger
 from login import login
+import diagnosa
 import pelajaran
 import tugas
 
@@ -167,6 +169,24 @@ with sync_playwright() as pw:
     check("pelajaran: batas halaman ditaati", pelajaran.jalankan_pelajaran(
         page, maks=2, timeout=4000)["halaman"] == 2)
     page.close()
+
+    # --- Diagnosa (baca saja) di halaman tiruan ---
+    page = browser.new_page()
+    page.goto(URL_ASLI)
+    folder_diag = LOG_DIR / "uji_diagnosa"
+    hasil_diag = diagnosa.rekam_state(page, folder_diag, setup_logger())
+    utama = hasil_diag[0]
+    ring_json = json.loads((folder_diag / "ringkasan.json").read_text(encoding="utf-8"))
+    check("diagnosa: ringkasan.json + html + screenshot frame utama ada",
+          ring_json["frame"][0]["frame"] == 0 and (folder_diag / "frame0.html").exists()
+          and (folder_diag / "frame0.png").exists())
+    check("diagnosa: #CheckAnswer dan a.tasksBtnext terhitung",
+          utama["selektor"]["#CheckAnswer"] >= 1 and utama["selektor"]["a.tasksBtnext"] >= 1)
+    check("diagnosa: tombol Next terdeteksi", any(t["teks"] == "Next" for t in utama["tombol_nav"]))
+    check("diagnosa: tidak mengklik apa pun (tak ada tugas selesai, See Answer nol)",
+          page.locator(".learning__tasksNav_task--done").count() == 0
+          and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
     browser.close()
 
     # --- Mode attach: "manusia" membuka + login, lalu bot menempel lewat CDP ---
@@ -199,6 +219,18 @@ with sync_playwright() as pw:
           manusia.locator("#header-status").inner_text() == "header 2 diklik")
     check("ambil_html: --nama berbahaya ditolak", subprocess.run(
         [sys.executable, str(BASE / "ambil_html.py"), "--nama", "../x", "--attach", "http://x"],
+        capture_output=True, text=True, timeout=30).returncode != 0)
+    diag = subprocess.run(
+        [sys.executable, str(BASE / "diagnosa.py"), "--target", "mock", "--state", "satu",
+         "--state", "dua", "--attach", f"http://127.0.0.1:{PORT_CDP}"],
+        input="\n\n", capture_output=True, text=True, timeout=60)
+    akar_diag = sorted(LOG_DIR.glob("diagnosa_*"))[-1] if list(LOG_DIR.glob("diagnosa_*")) else None
+    check("diagnosa CLI: exit 0 dan dua state tersimpan",
+          diag.returncode == 0 and akar_diag is not None
+          and (akar_diag / "satu" / "ringkasan.json").exists()
+          and (akar_diag / "dua" / "ringkasan.json").exists())
+    check("diagnosa CLI: nama state berbahaya ditolak", subprocess.run(
+        [sys.executable, str(BASE / "diagnosa.py"), "--state", "../x", "--attach", "http://x"],
         capture_output=True, text=True, timeout=30).returncode != 0)
     # --- Mode pantau: soal berganti -> hasil baru tersimpan otomatis ---
     for sisa in LOG_DIR.glob("uji_pantau*"):
