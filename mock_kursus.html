@@ -5,6 +5,8 @@
 <title>Mock kursus (latihan)</title>
 <style>
   .hidden { display: none; }
+  /* skenario geser: daftar "tertutup" hanya bergeser keluar layar (seperti situs asli), elemen tetap ada */
+  body.geser .learning__dropDownListW.hidden { display: block; position: fixed; top: -3000px; }
   .learning__tasksNav_task { display: inline-block; width: 14px; height: 14px; border: 1px solid #333; margin: 2px; }
   .learning__tasksNav_task--done { background: #2a6; }
   li, .learning__dropDownList_item, .learning__dropDownListTitleW, .home__unitIW { cursor: pointer; }
@@ -45,6 +47,7 @@
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
 const skenario = params.get("skenario");
+if (skenario === "geser") document.body.classList.add("geser");
 window.seeAnswerKlik = 0;
 window.testDikerjakan = 0;  // klik jawaban di step Test (bot tidak boleh menyentuhnya)
 

@@ -251,6 +251,14 @@ with sync_playwright() as pw:
         page.close()
 
     page = browser.new_page()
+    page.goto(URL_KURSUS + "?skenario=geser")
+    ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
+    check("kursus: daftar tertutup bergeser keluar layar -> dibuka lagi, 7 tugas selesai, Test tak diklik",
+          page.evaluate("() => selesaiJumlah()") == 7 and page.evaluate("() => testDikerjakan") == 0
+          and page.evaluate("() => seeAnswerKlik") == 0 and ring["tak_terverifikasi"] == 0)
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_KURSUS + "?skenario=semua")
     ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
     check("kursus: semua unit Completed! -> berhenti tanpa mengerjakan apa pun",

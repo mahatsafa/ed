@@ -377,21 +377,39 @@ def baca_daftar(page, jenis, timeout=TIMEOUT_MS):
     return hasil
 
 
+JS_DAFTAR_TERBUKA = """(jenis) => {
+  const w = document.querySelector('#learning__dropDownListW_' + jenis);
+  if (!w || !w.offsetParent && getComputedStyle(w).position !== 'fixed') return false;
+  const r = w.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0
+      && r.top < innerHeight && r.left < innerWidth;
+}"""
+
+
+def daftar_terbuka(page, jenis):
+    """Daftar lesson/step benar-benar terlihat di layar. Daftar yang menutup dengan bergeser keluar
+    layar (mis. sesudah Anda mengklik halaman) dianggap tertutup, walau elemennya masih ada."""
+    return page.evaluate(JS_DAFTAR_TERBUKA, jenis)
+
+
 def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
     """Buka dropdown lesson/step, klik item ke-`indeks`, tunggu item itu jadi yang aktif."""
     daftar = page.locator(f"#learning__dropDownListW_{jenis}")
     item = daftar.locator(SEL["item_daftar"]).nth(indeks)
-    if not daftar.is_visible():
+    if not daftar_terbuka(page, jenis):
         click(page, page.locator(f"#learning__dropDownListTitleW_{jenis}"), f"buka_daftar_{jenis}", timeout)
+        periksa(page, f"daftar_{jenis}_terbuka", lambda: page.wait_for_function(
+            JS_DAFTAR_TERBUKA, arg=jenis, timeout=timeout))
     wait_visible(page, item, f"item_{jenis}_{indeks + 1}", timeout)
     sudah_aktif = "--current" in (item.get_attribute("class") or "")
     if not sudah_aktif:
         click(page, item.locator(".learning__dropDownList_itemName"), f"pilih_{jenis}_{indeks + 1}", timeout)
         periksa(page, f"{jenis}_{indeks + 1}_aktif", lambda: expect(item).to_have_class(
             re.compile(r"--current"), timeout=timeout))
-    if daftar.is_visible():  # daftar masih terbuka: tutup supaya tidak menutupi soal
+    tunggu_stabil(page)  # beri waktu daftar menutup sendiri sebelum dicek
+    if daftar_terbuka(page, jenis):  # masih terbuka: tutup supaya tidak menutupi soal
         click(page, page.locator(f"#learning__dropDownListTitleW_{jenis}"), f"tutup_daftar_{jenis}", timeout)
-    tunggu_stabil(page)
+        tunggu_stabil(page)
 
 
 def cari_target(page, dilewati, timeout=TIMEOUT_MS):
