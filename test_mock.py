@@ -156,6 +156,17 @@ with sync_playwright() as pw:
     page.close()
 
     page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=dropdown")
+    page.wait_for_selector(".DDLOptions__selected")
+    check("dropdown kustom: dua dropdown terisi, daftar tertutup, tanpa Check/See Answer",
+          pelajaran.isi_dropdown(page, 4000) is True
+          and all(t.strip() for t in page.locator(".DDLOptions__selected").all_inner_texts())
+          and page.locator(".DDLOptions__selected").count() == 2
+          and page.locator(".DDLOptions__list").count() == 0
+          and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=kosong")
     check("pelajaran: select milik panel Dictionary tidak dianggap soal -> halaman tak dikenal",
           raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)

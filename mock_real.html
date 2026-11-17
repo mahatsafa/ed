@@ -12,6 +12,8 @@
   .kotak-video { position: relative; display: inline-block; }
   .learning__RAMROverlayW { position: absolute; inset: 0; }
   .learning__RAMRButton { width: 100%; height: 100%; }
+  .prFITB__DDLOptionsW { display: inline-block; vertical-align: middle; }
+  .DDLOptions__selected { min-width: 129px; min-height: 24px; border: 1px solid #888; }
 </style>
 </head>
 <body>
@@ -44,6 +46,7 @@ let tugas = ["video", "pilihan", "dropdown", "cloze", "bicara"];
 if (skenario === "tidakdikenal") tugas.push("teks");  // jenis soal yang tidak dikenal bot
 if (skenario === "drag") tugas = ["drag", "pilihan"];  // video + soal seret (tidak didukung)
 if (skenario === "kosong") tugas = ["kosong"];  // tidak ada kontrol soal yang dikenal
+if (skenario === "dropdown") tugas = ["dropdown"];  // hanya soal dropdown kustom
 let i = 0;
 const selesai = new Set();
 window.seeAnswerKlik = 0;
@@ -94,7 +97,22 @@ function gambar() {
       `<div class="prMCQ__answers"><input type="radio" class="layout__radio" id="question-1_answer-${n}" name="q1"> Opsi ${n}</div>`).join("");
   } else if (jenis === "dropdown") {
     $("#petunjuk").textContent = "Select the correct answer from the drop-down list.";
-    area.innerHTML = '<p>It <select id="dd"><option value=""></option><option>comes</option><option>come</option></select> at 10 A.M.</p>';
+    // Dropdown kustom seperti situs asli: daftar muncul di dalam wrapper saat diklik, hilang setelah memilih.
+    const dd = (opsi) => `<div class="prFITB__DDLOptionsW"><div class="DDLOptions__selected"></div></div>`;
+    area.innerHTML = `<p>It ${dd()} at 10 A.M. and they ${dd()} home.</p>`;
+    area.querySelectorAll(".prFITB__DDLOptionsW").forEach((w) => {
+      const sel = w.querySelector(".DDLOptions__selected");
+      sel.addEventListener("click", () => {
+        if (w.querySelector(".DDLOptions__list")) return;
+        w.insertAdjacentHTML("beforeend", '<div class="DDLOptions__list">' +
+          ["comes", "come", "coming"].map((o) => `<div class="DDLOptions__listItem">${o}</div>`).join("") + "</div>");
+        w.querySelectorAll(".DDLOptions__listItem").forEach((it) => it.addEventListener("click", (e) => {
+          e.stopPropagation();
+          sel.textContent = it.textContent;
+          w.querySelector(".DDLOptions__list").remove();
+        }));
+      });
+    });
   } else if (jenis === "cloze") {
     $("#petunjuk").textContent = "Read the interview, and fill in the missing words.";
     const kotak = [0, 1, 2].map((n) =>
@@ -166,7 +184,8 @@ $("#SeeAnswer").addEventListener("click", () => { window.seeAnswerKlik += 1; });
 $("#CheckAnswer").addEventListener("click", () => {
   const jenis = tugas[i];
   const benar = (jenis === "pilihan" && document.querySelector("input.layout__radio:checked")) ||
-                (jenis === "dropdown" && $("#dd").value !== "") ||
+                (jenis === "dropdown" && [...document.querySelectorAll(".DDLOptions__selected")]
+                    .every((e) => e.textContent.trim() !== "")) ||
                 (jenis === "cloze" && document.querySelectorAll(".prCLZ__regContainer .dnditem").length === 3);
   $("#reminder").classList.toggle("hidden", !!benar);
   if (benar) tandaiSelesai();

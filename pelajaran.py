@@ -20,7 +20,10 @@ SEL = {
     "modal_tutup": "button.close, [aria-label=Close], .close",
     "video": "video",
     "radio": "input.layout__radio",
-    "dropdown": "select",
+    "dropdown": ".prFITB__DDLOptionsW",  # dropdown kustom (bukan <select>)
+    "dd_terpilih": ".DDLOptions__selected",
+    "dd_daftar": ".DDLOptions__list",
+    "dd_item": ".DDLOptions__listItem",
     "cloze_kotak": ".prCLZ__regContainer .dndZone",  # kotak kosong
     "cloze_kata": ".prCLZ__wordsBankWrapper .dnditem",  # kata di bank
     "kata_terisi": ".dnditem",
@@ -104,17 +107,25 @@ def pilih_radio(page, timeout=TIMEOUT_MS):
 
 
 def isi_dropdown(page, timeout=TIMEOUT_MS):
+    """Isi tiap dropdown kustom dengan item pertama di daftarnya (tanpa membaca kunci)."""
     daftar = page.locator(SEL["dropdown"])
     jumlah = daftar.count()
     dikerjakan = False
     for n in range(jumlah):  # batas atas = jumlah dropdown
         satu = daftar.nth(n)
-        # lewati dropdown milik panel Dictionary (bukan bagian soal) dan yang tak terlihat
-        if not satu.is_visible() or satu.evaluate("e => !!e.closest('#DictionaryPanelContainer')"):
+        if not satu.is_visible():
             continue
-        satu.select_option(index=1, timeout=timeout)
+        terpilih = satu.locator(SEL["dd_terpilih"])
+        if terpilih.inner_text().strip():
+            dikerjakan = True  # sudah terisi
+            continue
+        click(page, terpilih, f"dropdown_{n + 1}_buka", timeout)
+        wait_visible(page, satu.locator(SEL["dd_daftar"]), f"dropdown_{n + 1}_daftar", timeout)
+        click(page, satu.locator(SEL["dd_item"]).first, f"dropdown_{n + 1}_item_1", timeout)
         periksa(page, f"dropdown_{n + 1}_terisi",
-                lambda s=satu: expect(s).not_to_have_value("", timeout=timeout))
+                lambda t=terpilih: expect(t).not_to_have_text("", timeout=timeout))
+        periksa(page, f"dropdown_{n + 1}_daftar_tertutup", lambda s=satu: expect(
+            s.locator(SEL["dd_daftar"])).to_have_count(0, timeout=timeout))
         dikerjakan = True
     return dikerjakan
 
