@@ -52,6 +52,11 @@ Kalau pemeriksaan gagal, bot mencatat error, menyimpan screenshot ke `logs/`, la
 tab yang sudah Anda buka (verifikasi dan login dilakukan manusia), lalu mengerjakan tugas di tab itu.
 Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 
+### Mode --buka (paling mudah di WSL)
+`bot.py --target real --buka` membuka Chromium di WSL (profil `~/.engdis-chrome-profil`, sesi login
+tersimpan), lalu menunggu. Anda login dan buka dashboard di jendela itu, tekan Enter di terminal, bot
+mengerjakan. Port 9222 sudah dipakai browser lain = dipakai ulang. Chromium tidak ditutup bot di akhir.
+
 ### pelajaran.py (situs asli)
 `jalankan_pelajaran` mengerjakan satu halaman soal, klik Next, lalu mengulang:
 - Yang dikenali: video (putar), pilihan ganda (opsi pertama tiap pertanyaan `.prMCQ__qaSet`, klik label),

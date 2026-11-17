@@ -8,7 +8,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-from bot import URLS, load_credentials
+from bot import URLS, buka_chrome, cdp_siap, load_credentials
 from helpers import LOG_DIR, setup_logger
 from login import login
 import diagnosa
@@ -296,6 +296,24 @@ with sync_playwright() as pw:
           and page.evaluate("() => window.seeAnswerKlik") == 0)
     page.close()
     browser.close()
+
+    # --- Mode buka: bot membuka Chromium sendiri dengan port debug (tanpa jendela untuk uji) ---
+    port_buka = 9444
+    profil_uji = LOG_DIR / "profil_uji_buka"
+    proses_buka = buka_chrome(pw, URLS["mock"], port_buka, tanpa_jendela=True, profil=profil_uji)
+    try:
+        sambung = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{port_buka}")
+        urls_buka = [pg.url for c in sambung.contexts for pg in c.pages]
+        check("buka: Chromium terbuka di port debug dan memuat URL target",
+              proses_buka is not None and cdp_siap(port_buka) and any("mock.html" in u for u in urls_buka))
+        check("buka: port sudah dipakai -> dipakai ulang, tidak membuka dobel",
+              buka_chrome(pw, URLS["mock"], port_buka, tanpa_jendela=True, profil=profil_uji) is None)
+        sambung.close()
+    finally:
+        if proses_buka is not None:
+            proses_buka.terminate()
+            proses_buka.wait(timeout=20)
+    check("buka: setelah ditutup, port debug mati", not cdp_siap(port_buka))
 
     # --- Mode attach: "manusia" membuka + login, lalu bot menempel lewat CDP ---
     peramban = pw.chromium.launch(args=[f"--remote-debugging-port={PORT_CDP}"])
