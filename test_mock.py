@@ -262,6 +262,16 @@ with sync_playwright() as pw:
     check("kursus: status progres tak terbaca -> berhenti (gagal tertutup)",
           raises(lambda: pelajaran.jalankan_pelajaran(page, timeout=4000), pelajaran.JenisSoalTidakDikenal)
           and page.evaluate("() => selesaiJumlah()") == 0)
+    check("kursus: pembacaan daftar gagal -> HTML daftar tersimpan di logs/",
+          any(f.stat().st_size > 0 for f in LOG_DIR.glob("*_daftar_*.html")))
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_KURSUS + "?skenario=teststatuskosong")
+    ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
+    check("kursus: step Test tanpa penanda status -> tetap jalan, 7 tugas selesai, Test tak diklik",
+          page.evaluate("() => selesaiJumlah()") == 7 and page.evaluate("() => testDikerjakan") == 0
+          and page.evaluate("() => seeAnswerKlik") == 0 and ring["tak_terverifikasi"] == 0)
     page.close()
 
     page = browser.new_page()

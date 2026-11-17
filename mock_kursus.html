@@ -99,7 +99,7 @@ function daftar(jenis) {
   kotak.innerHTML = item.map((i) =>
     `<div class="learning__dropDownList_item${i.cur ? " learning__dropDownList_item--current" : ""}">` +
     `<div class="learning__dropDownList_itemName"><div class="learning__dropDownList_itemNameText">${i.nama}</div></div>` +
-    (skenario === "statuskosong" ? "" :
+    (skenario === "statuskosong" || (skenario === "teststatuskosong" && jenis === "steps" && /Test/.test(i.nama)) ? "" :
       `<div class="learning__dropDownList_itemProgress"><div class="progressBar__progress progressBar__progress--${i.st}"><span class="progressBar__tooltip">${i.st}</span></div></div>`) +
     `</div>`).join("");
   kotak.querySelectorAll(".learning__dropDownList_item").forEach((el, n) => el.addEventListener("click", () => {

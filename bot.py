@@ -24,7 +24,7 @@ from tugas import jalankan_semua
 
 URLS = {
     "mock": (Path(__file__).parent / "mock.html").resolve().as_uri(),
-    "real": "https://ed.engdis.com",
+    "real": "https://ed.engdis.com/smktelkommlg#/",
 }
 CIRI_HALAMAN = {"mock": "mock.html", "real": "ed.engdis.com"}  # untuk mencari tab di mode attach
 PORT_CDP = 9222

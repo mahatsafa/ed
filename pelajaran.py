@@ -6,11 +6,12 @@ Aturan keselamatan:
 - Tidak pernah menyentuh "See Answer" (kunci jawaban); jawaban dipilih tanpa membaca kunci.
 """
 import re
+from datetime import datetime
 
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import expect
 
-from helpers import TIMEOUT_MS, click, periksa, screenshot_on_fail, setup_logger, wait_visible
+from helpers import LOG_DIR, TIMEOUT_MS, click, periksa, screenshot_on_fail, setup_logger, wait_visible
 
 SEL = {
     "instruksi": ".learning__headerIW",  # kalimat instruksi di atas soal
@@ -44,6 +45,8 @@ SEL = {
 # Step yang dikerjakan manual oleh pemilik akun (bernilai); bot tidak menyentuhnya.
 STEP_MANUAL = re.compile(r"\b(Test|Quiz|Exam)\b", re.I)
 MAX_UNIT = 60  # batas unit yang dicoba per jalan
+TUNGGU_AREA_MS = 45_000  # halaman area belajar adalah muat-ulang penuh (learningArea.html), bisa lambat
+TUNGGU_DASHBOARD_MS = 30_000
 MAX_STEP = 400  # batas (lesson, step) yang dikerjakan per jalan
 MAX_TOTAL_HALAMAN = 3000  # batas halaman soal per jalan
 HEADER_ASLI = ("settingsMenu__dictionary", "settingsMenu__help")  # dua tombol header yang diklik
@@ -345,16 +348,31 @@ JS_DAFTAR = """(jenis) => [...document.querySelectorAll(
 })"""
 
 
+def simpan_html_daftar(page, jenis):
+    """Simpan HTML daftar lesson/step ke logs/ (baca saja) sebagai bukti saat pembacaan gagal."""
+    LOG_DIR.mkdir(exist_ok=True)
+    path = LOG_DIR / f"{datetime.now():%Y%m%d-%H%M%S}_daftar_{jenis}.html"
+    html = page.evaluate("(j) => { const w = document.querySelector('#learning__dropDownListW_' + j);"
+                         " return w ? w.outerHTML : ''; }", jenis)
+    path.write_text(html, encoding="utf-8")
+    setup_logger().error("HTML daftar %s disimpan: %s", jenis, path)
+
+
 def baca_daftar(page, jenis, timeout=TIMEOUT_MS):
-    """Daftar lesson/step beserta status (done/inProgress/notStarted). Status tak dikenal = berhenti."""
+    """Daftar lesson/step beserta status (done/inProgress/notStarted). Status tak dikenal = berhenti,
+    kecuali step Test/Quiz/Exam: itu tidak dikerjakan bot apa pun statusnya, jadi tanpa penanda = "manual"."""
     try:  # daftar dirender belakangan (Angular): tunggu ada item dulu, jangan membaca daftar kosong
         page.locator(f"#learning__dropDownListW_{jenis} {SEL['item_daftar']}").first.wait_for(
             state="attached", timeout=timeout)
     except PWTimeout:
         pass  # kosong tetap ditolak di bawah, lengkap dengan screenshot
     hasil = page.evaluate(JS_DAFTAR, jenis)
+    for h in hasil:
+        if jenis == "steps" and h["status"] is None and STEP_MANUAL.search(h["nama"]):
+            h["status"] = "manual"
     if not hasil or any(h["status"] is None for h in hasil):
         screenshot_on_fail(page, f"daftar_{jenis}_tak_terbaca")
+        simpan_html_daftar(page, jenis)
         raise JenisSoalTidakDikenal(f"Daftar {jenis} kosong atau status progres tak terbaca.")
     return hasil
 
@@ -417,7 +435,8 @@ def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
         unit_dicoba.add(n)
         setup_logger().info("Buka unit ke-%d: %s", n + 1, kartu.nth(n).inner_text().replace("\n", " ")[:50])
         click(page, kartu.nth(n), f"kartu_unit_{n + 1}", timeout)
-        wait_visible(page, page.locator("#learning__dropDownListTitleW_lessons"), "area_belajar", timeout)
+        wait_visible(page, page.locator("#learning__dropDownListTitleW_lessons"), "area_belajar",
+                 max(timeout, TUNGGU_AREA_MS))
         tunggu_stabil(page)
         return True
     return False
@@ -425,7 +444,7 @@ def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
 
 def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
     click(page, page.locator(SEL["rumah"]), "ikon_rumah", timeout)
-    wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", timeout)
+    wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", max(timeout, TUNGGU_DASHBOARD_MS))
 
 
 def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN):
