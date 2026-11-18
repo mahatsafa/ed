@@ -476,20 +476,22 @@ def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS):
 
 
 def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
-    """Dari dashboard: klik unit pertama yang belum "Completed!" dan belum dicoba. False kalau tak ada."""
+    """Dari dashboard: klik unit pertama yang belum "Completed!" dan belum dicoba. Kembalikan nama
+    unit (teks kartu), atau None kalau tak ada."""
     kartu = page.locator(SEL["kartu_unit"])
     wait_visible(page, kartu.first, "kartu_unit", timeout)
     for n in range(min(kartu.count(), MAX_UNIT)):  # batas atas = jumlah kartu
         if n in unit_dicoba or "Completed!" in kartu.nth(n).inner_text():
             continue
         unit_dicoba.add(n)
-        setup_logger().info("Buka unit ke-%d: %s", n + 1, kartu.nth(n).inner_text().replace("\n", " ")[:50])
+        nama = kartu.nth(n).inner_text().replace("\n", " ")[:50]
+        setup_logger().info("Buka unit ke-%d: %s", n + 1, nama)
         click(page, kartu.nth(n), f"kartu_unit_{n + 1}", timeout)
         wait_visible(page, page.locator("#learning__dropDownListTitleW_lessons"), "area_belajar",
                  max(timeout, TUNGGU_AREA_MS))
         tunggu_stabil(page)
-        return True
-    return False
+        return nama
+    return None
 
 
 def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
@@ -497,30 +499,59 @@ def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
     wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", max(timeout, TUNGGU_DASHBOARD_MS))
 
 
-def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN):
+def catat_rencana(page, unit, lesson, rencana, timeout=TIMEOUT_MS):
+    """Uji kering: catat step yang akan dikerjakan dan yang dilewati (Test) di lesson yang sedang dibuka."""
+    steps = baca_daftar(page, "steps", timeout)
+    akan = [s["nama"].strip() for s in steps if s["status"] != "done" and not STEP_MANUAL.search(s["nama"])]
+    lewat = [s["nama"].strip() for s in steps if STEP_MANUAL.search(s["nama"])]
+    if any(r["unit"] == "(area saat ini)" and (r["lesson"], r["dikerjakan"], r["dilewati"]) == (lesson, akan, lewat)
+           for r in rencana):  # mulai dari area: unit yang sama dibuka lagi lewat kartu dashboard
+        return
+    rencana.append({"unit": unit, "lesson": lesson, "dikerjakan": akan, "dilewati": lewat})
+    setup_logger().info("RENCANA | unit %s | lesson %s | dikerjakan: %s | dilewati (Test): %s",
+                        unit, lesson, akan or "-", lewat or "-")
+
+
+def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN, hanya_baca=False):
     """Mulai dari dashboard (atau area belajar), kerjakan lesson demi lesson sampai semua unit
-    selesai, kecuali step Test yang dikerjakan manual. Berhenti kalau ada jenis soal tak dikenal."""
+    selesai, kecuali step Test yang dikerjakan manual. Berhenti kalau ada jenis soal tak dikenal.
+    hanya_baca=True (uji kering): hanya berpindah unit/lesson/step dan mencatat rencana, tidak menjawab."""
     log = setup_logger()
     ringkasan = {"halaman": 0, "tak_terverifikasi": 0}
+    rencana, unit = [], "(area saat ini)"
     unit_dicoba, langkah = set(), 0
     if not ada_dashboard(page) and not ada_area(page):
         screenshot_on_fail(page, "bukan_dashboard_atau_area")
         raise JenisSoalTidakDikenal(f"Bukan dashboard atau area belajar: {page.url.split('?')[0]}")
     while True:
-        if ada_dashboard(page) and not buka_unit(page, unit_dicoba, timeout):
-            log.info("Semua unit selesai (selain step Test).")
-            break
+        if ada_dashboard(page):
+            unit = buka_unit(page, unit_dicoba, timeout)
+            if unit is None:
+                log.info("Semua unit selesai (selain step Test).")
+                break
         dilewati, dicoba = set(), set()  # nama lesson berulang antar unit, jadi dicatat per unit
         while True:
             langkah += 1
             if langkah > MAX_STEP or ringkasan["halaman"] >= maks_halaman:
                 log.warning("Batas langkah/halaman tercapai, berhenti.")
-                klik_header(page, timeout)
-                return ringkasan
-            if buka_lesson_berikutnya(page, dilewati, dicoba, timeout) is None:
+                if not hanya_baca:
+                    klik_header(page, timeout)
                 break
+            target = buka_lesson_berikutnya(page, dilewati, dicoba, timeout)
+            if target is None:
+                break
+            if hanya_baca:
+                catat_rencana(page, unit, target[0], rencana, timeout)
+                dilewati.add(target[0])  # lanjut ke lesson berikutnya tanpa menjawab apa pun
+                continue
             kerjakan_berurutan(page, ringkasan, maks_halaman - ringkasan["halaman"], timeout)
+        if langkah > MAX_STEP or ringkasan["halaman"] >= maks_halaman:
+            return ringkasan
         kembali_ke_dashboard(page, timeout)
+    if hanya_baca:
+        ringkasan["rencana"] = rencana
+        log.info("Uji kering selesai: %d lesson punya step yang akan dikerjakan; tidak ada yang dijawab.", len(rencana))
+        return ringkasan
     klik_header(page, timeout)  # terakhir, supaya modal dari menu Help tidak menghalangi soal
     log.info("Ringkasan: %s", ringkasan)
     return ringkasan

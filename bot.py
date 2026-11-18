@@ -78,10 +78,10 @@ def buka_chrome(pw, url, port=PORT_CDP, tanpa_jendela=False, profil=PROFIL_CHROM
     raise RuntimeError(f"Port debug {port} tidak siap dalam {MAKS_TUNGGU_CHROME // 4} detik.")
 
 
-def jalankan(page, target):
+def jalankan(page, target, hanya_baca=False):
     """Situs asli: pengulang pelajaran. Mock: semua elemen dalam satu halaman."""
     if target == "real":
-        return jalankan_pelajaran(page)
+        return jalankan_pelajaran(page, hanya_baca=hanya_baca)
     return jalankan_semua(page)
 
 
@@ -112,7 +112,11 @@ def main():
                         help="tempel ke browser yang sudah terbuka, mis. http://127.0.0.1:9222")
     parser.add_argument("--buka", action="store_true",
                         help="buka Chromium di WSL sendiri, tunggu Anda login, lalu kerjakan (memakai --attach otomatis)")
+    parser.add_argument("--hanya-baca", action="store_true",
+                        help="uji kering: berpindah unit/lesson/step dan catat rencana, tanpa menjawab apa pun")
     args = parser.parse_args()
+    if args.hanya_baca and args.target != "real":
+        parser.error("--hanya-baca hanya untuk --target real.")
     if args.buka:
         if args.attach:
             parser.error("--buka dan --attach tidak boleh dipakai bersamaan.")
@@ -129,14 +133,14 @@ def main():
             # Anda sudah login sendiri; bot hanya mengerjakan tugas di tab itu.
             browser = pw.chromium.connect_over_cdp(args.attach)
             page = cari_tab(browser, args.target)
-            jalankan(page, args.target)
+            jalankan(page, args.target, args.hanya_baca)
         else:
             user, password = load_credentials()
             browser = pw.chromium.launch(headless=not args.headed)
             page = browser.new_page()
             try:
                 login(page, args.target, URLS[args.target], user, password)
-                jalankan(page, args.target)
+                jalankan(page, args.target, args.hanya_baca)
             finally:
                 browser.close()
     log.info("Selesai.")

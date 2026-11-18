@@ -267,6 +267,19 @@ with sync_playwright() as pw:
               and page.evaluate("() => seeAnswerKlik") == 0 and ring["tak_terverifikasi"] == 0)
         page.close()
 
+    for nama, tambah in (("biasa", ""), ("daftar lesson terkunci, mulai di intro Test", "?skenario=kunci&mulai=test")):
+        page = browser.new_page()
+        page.goto(URL_KURSUS + tambah)
+        ring = pelajaran.jalankan_pelajaran(page, timeout=4000, hanya_baca=True)
+        rencana = ring["rencana"]
+        akan = [x for r in rencana for x in r["dikerjakan"]]
+        lewat = [x for r in rencana for x in r["dilewati"]]
+        check(f"kursus uji kering ({nama}): 5 step direncanakan, 2 Test dilewati, tak ada yang dijawab",
+              len(akan) == 5 and not any("Test" in x for x in akan) and len(lewat) == 2
+              and ring["halaman"] == 0 and page.evaluate("() => selesaiJumlah()") == 0
+              and page.evaluate("() => testDikerjakan") == 0 and page.evaluate("() => seeAnswerKlik") == 0)
+        page.close()
+
     page = browser.new_page()
     page.goto(URL_KURSUS + "?skenario=hanyatest&mulai=test")
     ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
@@ -452,6 +465,9 @@ with sync_playwright() as pw:
         [sys.executable, str(BASE / "bot.py"), "--target", "mock",
          "--attach", f"http://127.0.0.1:{PORT_CDP}"],
         capture_output=True, text=True, timeout=60)
+    check("--hanya-baca untuk target mock -> ditolak",
+          subprocess.run([sys.executable, str(BASE / "bot.py"), "--target", "mock", "--hanya-baca"],
+                         capture_output=True, text=True, timeout=30).returncode != 0)
     check("mode attach: tab tidak ada -> bot berhenti (exit 1)", kosong.returncode == 1)
     check("mode attach: pesan error menyebut tab yang terlihat",
           "Tab yang terlihat bot" in kosong.stdout + kosong.stderr)
