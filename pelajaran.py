@@ -381,9 +381,9 @@ JS_DAFTAR_TERBUKA = """(jenis) => {
   const w = document.querySelector('#learning__dropDownListW_' + jenis);
   if (!w || !w.offsetParent && getComputedStyle(w).position !== 'fixed') return false;
   const r = w.getBoundingClientRect();
-  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0
+  return r.width > 0 && r.height > 0 && r.top > -20 && r.bottom > 0 && r.right > 0
       && r.top < innerHeight && r.left < innerWidth;
-}"""
+}"""  # situs asli: terbuka top=62; tertutup top=-304 (tinggi 372, jadi bawahnya masih menyentuh layar)
 
 
 def daftar_terbuka(page, jenis):
