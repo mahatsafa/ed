@@ -258,6 +258,23 @@ with sync_playwright() as pw:
           and page.evaluate("() => seeAnswerKlik") == 0 and ring["tak_terverifikasi"] == 0)
     page.close()
 
+    for nama, tambah in (("dari dashboard", "?skenario=kunci"), ("mulai di intro Test", "?skenario=kunci&mulai=test")):
+        page = browser.new_page()
+        page.goto(URL_KURSUS + tambah)
+        ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
+        check(f"kursus daftar lesson terkunci di Test ({nama}): 7 tugas selesai, Test tak diklik, See Answer nol",
+              page.evaluate("() => selesaiJumlah()") == 7 and page.evaluate("() => testDikerjakan") == 0
+              and page.evaluate("() => seeAnswerKlik") == 0 and ring["tak_terverifikasi"] == 0)
+        page.close()
+
+    page = browser.new_page()
+    page.goto(URL_KURSUS + "?skenario=hanyatest&mulai=test")
+    ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
+    check("kursus: lesson hanya berisi Test dan daftar terkunci -> unit dilewati, kembali ke dashboard, 0 tugas",
+          ring["halaman"] == 0 and page.evaluate("() => selesaiJumlah()") == 0
+          and page.evaluate("() => testDikerjakan") == 0 and page.locator("#home").is_visible())
+    page.close()
+
     page = browser.new_page()
     page.goto(URL_KURSUS + "?skenario=semua")
     ring = pelajaran.jalankan_pelajaran(page, timeout=4000)

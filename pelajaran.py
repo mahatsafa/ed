@@ -412,12 +412,44 @@ def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
         tunggu_stabil(page)
 
 
+KUNCI_LESSON = "#learning__dropDownListTitleW_lessons.learning__dropDownListTitleW--disabled"
+
+
+def lesson_terkunci(page):
+    """Situs asli mengunci daftar lesson (judul berkelas --disabled) selama step aktif adalah Test."""
+    return page.locator(KUNCI_LESSON).count() > 0
+
+
+def buka_kunci_lesson(page, timeout=TIMEOUT_MS):
+    """Kalau daftar lesson terkunci, pindah ke step non-Test pertama di lesson ini (hanya pindah
+    tampilan: tidak menjawab, step Test tidak disentuh). False kalau tak bisa dibuka (gagal tertutup)."""
+    log = setup_logger()
+    if not lesson_terkunci(page):
+        return True
+    log.info("Daftar lesson terkunci (step Test aktif): pindah ke step non-Test untuk membukanya")
+    for si, step in enumerate(baca_daftar(page, "steps", timeout)):  # batas atas = jumlah step
+        if STEP_MANUAL.search(step["nama"]):
+            continue
+        pilih_item(page, "steps", si, timeout)
+        try:
+            page.wait_for_function(f"() => !document.querySelector({KUNCI_LESSON!r})",
+                                   timeout=min(timeout, 6000))
+            return True
+        except PWTimeout:
+            break
+    log.warning("Daftar lesson tetap terkunci; unit ini dilewati.")
+    screenshot_on_fail(page, "daftar_lesson_terkunci")
+    return False
+
+
 def cari_target(page, dilewati, timeout=TIMEOUT_MS):
     """Cari (lesson, indeks step, nama step) pertama yang belum selesai dan bukan step manual.
     Lesson yang hanya tersisa step manual dicatat di `dilewati` (per unit). Tidak ada = None."""
     for li, lesson in enumerate(baca_daftar(page, "lessons")):  # batas atas = jumlah lesson
         if lesson["status"] == "done" or lesson["nama"] in dilewati:
             continue
+        if not buka_kunci_lesson(page, timeout):  # step Test aktif mengunci daftar lesson
+            return None
         pilih_item(page, "lessons", li, timeout)
         for si, step in enumerate(baca_daftar(page, "steps")):  # batas atas = jumlah step
             if step["status"] != "done" and not STEP_MANUAL.search(step["nama"]):

@@ -57,6 +57,7 @@ const lessons = [
   {nama: "2. Swimming", steps: [{nama: "1. Prepare", tugas: 1}, {nama: "2. Practice ", tugas: 1}, {nama: "3. Test", tugas: 1}]},
   {nama: "3. Review", steps: [{nama: "1. Practice ", tugas: 2}]},
 ];
+if (skenario === "hanyatest") lessons.splice(0, lessons.length, {nama: "1. Sports", steps: [{nama: "1. Test", tugas: 1}]});
 const halaman = [];  // urutan datar: intro tiap step (t = -1), lalu tugas-tugasnya
 lessons.forEach((L, l) => L.steps.forEach((S, s) => {
   halaman.push({l, s, t: -1});
@@ -65,6 +66,7 @@ lessons.forEach((L, l) => L.steps.forEach((S, s) => {
 const selesai = new Set();
 window.selesaiJumlah = () => selesai.size;
 let p = 0;
+if (params.get("mulai") === "test") p = halaman.findIndex((h) => h.t === -1 && /Test/.test(lessons[h.l].steps[h.s].nama));
 
 function statusStep(l, s) {
   const n = lessons[l].steps[s].tugas;
@@ -112,7 +114,8 @@ function daftar(jenis) {
     setTimeout(gambar, 300);
   }));
 }
-["lessons", "steps"].forEach((jenis) => $(`#learning__dropDownListTitleW_${jenis}`).addEventListener("click", () => {
+["lessons", "steps"].forEach((jenis) => $(`#learning__dropDownListTitleW_${jenis}`).addEventListener("click", (e) => {
+  if (e.currentTarget.classList.contains("learning__dropDownListTitleW--disabled")) return;
   $(`#learning__dropDownListW_${jenis}`).classList.toggle("hidden");
 }));
 
@@ -130,6 +133,9 @@ function gambar() {
   $("#reminder").classList.add("hidden");
   const tl = $("#learning__dropDownListTitleW_lessons .learning__dropDownListTitle");
   tl.title = tl.textContent = `Lesson ${lessons[cur.l].nama}`;
+  // skenario kunci: seperti situs asli, daftar lesson terkunci selama step aktif bernama Test
+  $("#learning__dropDownListTitleW_lessons").classList.toggle("learning__dropDownListTitleW--disabled",
+    (skenario === "kunci" || skenario === "hanyatest") && /Test/.test(lessons[cur.l].steps[cur.s].nama));
   if (skenario !== "tanpajudul") {
     const ts = $("#learning__dropDownListTitleW_steps .learning__dropDownListTitle");
     ts.title = ts.textContent = `Step ${lessons[cur.l].steps[cur.s].nama}`;
@@ -169,7 +175,7 @@ $(".tasksBtnext").addEventListener("click", () => {
   if (p < halaman.length - 1) { p += 1; $("#area").innerHTML = ""; setTimeout(gambar, 300); }
 });
 
-if (params.get("mulai") === "area") tampil("belajar"); else tampil("home");
+if (params.get("mulai") === "area" || params.get("mulai") === "test") tampil("belajar"); else tampil("home");
 </script>
 </body>
 </html>
