@@ -52,6 +52,12 @@ Kalau pemeriksaan gagal, bot mencatat error, menyimpan screenshot ke `logs/`, la
 tab yang sudah Anda buka (verifikasi dan login dilakukan manusia), lalu mengerjakan tugas di tab itu.
 Mode ini sudah diuji di mock. Untuk situs asli **belum diuji**.
 
+### Uji kering: --hanya-baca
+`bot.py --target real --buka --hanya-baca` berpindah unit/lesson/step seperti biasa tetapi TIDAK menjawab
+apa pun. Log `RENCANA | unit | lesson | dikerjakan | dilewati (Test)` menunjukkan apa yang akan dikerjakan
+bot. Jalankan ini dulu, periksa tidak ada step bernama lain yang sebenarnya ujian, baru jalan biasa.
+Situs asli mengunci daftar lesson selama step Test aktif; bot lalu pindah ke step non-Test dulu.
+
 ### Mode --buka (paling mudah di WSL)
 `bot.py --target real --buka` membuka Chromium di WSL (profil `~/.engdis-chrome-profil`, sesi login
 tersimpan), lalu menunggu. Anda login dan buka dashboard di jendela itu, tekan Enter di terminal, bot

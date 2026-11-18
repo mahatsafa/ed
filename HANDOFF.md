@@ -53,6 +53,12 @@ Belum terbukti di `ed.engdis.com` asli (hanya diuji di tiruan `mock_kursus.html`
      `#DictionaryPanelContainer` -> berhenti sebelum mengklik apa pun. Kalau panel Dictionary asli punya
      input teks di luar kontainer itu, bot akan berhenti salah (gagal tertutup); kirim screenshot-nya.
   6. Soal suara (webRtc, pantau_008) tetap tidak ditangani; isian teks belum pernah terekam.
+- Temuan uji situs asli 2026-11-18 (DOM dibaca lewat CDP, baca saja): judul daftar lesson berkelas
+  `learning__dropDownListTitleW--disabled` selama step aktif = Test (daftar lesson terkunci, daftar step
+  tidak); daftar lesson tertutup berada di y=-304 (tinggi 372), terbuka di sekitar y=62; step Test tidak
+  punya progress bar. Perbaikan: `buka_kunci_lesson`, `daftar_terbuka` (posisi atas), step Test = "manual".
+  Unit 4 punya lesson ke-7 "7. Sports" (notStarted), isinya belum diketahui: jalankan `--hanya-baca` dulu.
+  Belum terbukti: ikon rumah bisa diklik dari intro Test; pindah ke step non-Test membuka kunci.
 - Fase 4: uji iteratif di situs asli (kirim log + screenshot tiap berhenti); target 1 lesson penuh.
 - Bug `cari_tab` "unhashable dict": TIDAK ada di worktree ini (sudah `CIRI_HALAMAN[target]`). Kemungkinan
   salinan lain (mis. folder Windows) masih versi lama; pemilik perlu menyamakan salinan yang dijalankan.
