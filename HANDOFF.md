@@ -89,7 +89,7 @@ cd ~/engdis-bot/.claude/worktrees/tahap-2-elemen
 git status --short && git log --oneline -3
 ps -eo args | grep -E "test_mock|bot.py" | grep -v grep | wc -l   # harapan: 0
 ~/engdis-bot/.venv/bin/python -u test_mock.py > logs/test_mock_terakhir.txt 2>&1   # ~10 menit: jalankan di latar belakang
-grep -c LULUS logs/test_mock_terakhir.txt; grep -c GAGAL logs/test_mock_terakhir.txt   # harapan: 138 dan 0
+grep -c LULUS logs/test_mock_terakhir.txt; grep -c GAGAL logs/test_mock_terakhir.txt   # harapan: 141 dan 0
 ```
 Aturan yang berlaku: ikuti `~/.claude/CLAUDE.md`. Perubahan perilaku kode wajib disertai uji otomatis;
 banyak file diubah atomik (skrip patch Python); commit jujur (tulis yang belum terbukti).
@@ -134,3 +134,26 @@ Bukti: klik pilihan tak berpengaruh; tombol Start nonaktif; sesi Speech Recognit
 - B: bot melewati (Continue) dan menerima step tidak pernah `done`.
 - C: mikrofon virtual (flag Chromium + file audio ucapan); ketergantungan baru, perlu persetujuan.
 Posisi terakhir: Lesson 3, Step 2 Practice, halaman 4/5 (soal suara); Lesson 1 dan 2 sudah done.
+
+### 7b. Tambahan akhir sesi 2026-11-19
+Selesai sejak 7: soal suara (webRtc) = cukup direkam (`rekam_suara`: tunggu Start aktif, klik, tunggu "Try again";
+situs merekam otomatis ±8 dtk; keputusan pemilik akun: isi ucapan tak dinilai). Mikrofon laptop terlihat di Chromium
+(izin granted; perangkat Default dan RDP Source). Lesson 3 Practice dianggap selesai oleh situs.
+
+MASALAH TERBUKA 1 (perlu tindakan pemilik akun): audio keluaran Chromium macet global setelah sesi mikrofon.
+Bukti: AudioContext di tab kosong maju 0,000 dtk per 1 dtk; /mnt/wslg/pulseaudio.log penuh
+"rdp-source: q overrun, queuing locally"; di Lesson 4 Prepare `#syncAudioPlayer` paused=false tetapi currentTime=0
+(bot gagal di `video_terputar`). Percobaan mematikan proses AudioService Chromium ditolak pemeriksa izin; cadangan:
+`wsl --shutdown` lalu buka Chromium lagi (login mungkin diulang). Uji pemulihan: jam AudioContext harus maju ±1 per dtk.
+Kalau terulang tiap kali soal suara: pertimbangkan mematikan keluaran audio Chromium (flag di bot.py buka_chrome) agar
+jam media tak bergantung pada perangkat audio; perlu persetujuan pemilik akun (mengubah cara Chromium dibuka).
+
+MASALAH TERBUKA 2: step "Interact" (dialog peran) belum punya handler. Struktur (dari rekaman): `.speakingInteract`,
+`a.chooseCaracterArrow` kiri/kanan untuk memilih karakter, `.speakingInteractPanelsWrapper a.button.continue` (Start,
+nonaktif sampai karakter dipilih/sesi siap), `.recordingPanelSentence` (kalimat bernomor, `.statusIcon`), tombol
+`startAgain` (Restart). Bot sekarang berhenti di sini (gagal tertutup); langkah berikut: amati alurnya saat audio
+berfungsi (klik panah, Start, tunggu semua kalimat selesai) lalu tulis handler + uji. Reminder aktivitas 1 muncul
+bila dilewati.
+
+Posisi terakhir: Lesson 3 selesai sampai Practice; Step 3 Interact 1 belum; Lesson 4 Prepare menunggu audio pulih.
+Commit terakhir di kode: lihat `git log -3`.
