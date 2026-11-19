@@ -64,6 +64,16 @@ JS_ISIAN_TEKS = """() => [...document.querySelectorAll('textarea, [contenteditab
 TEKS_BEBAS = ".prOpenEnded__qaItemText--textarea"  # soal dikte/isian bebas: satu textarea per kalimat
 ISIAN_TEKS = "a"  # jawaban salah tidak masalah (keputusan pemilik akun); yang perlu: soal tercatat dikerjakan
 MAX_TEKS_BEBAS = 20  # batas textarea per halaman; lebih dari ini = bentuk halaman tak terduga, berhenti
+# Soal menulis (prWriting): editor TinyMCE di iframe, tombol Done; kurang dari 5 kata ditolak situs.
+TULISAN = {
+    "area": ".prWriting__practice",
+    "editor": ".prWriting__editorW iframe[id$=_ifr]",  # iframe TinyMCE; isinya body#tinymce
+    "kata": ".prWriting__editorWords",
+    "done": ".prWriting__action--submit",
+    "done_nonaktif": ".prWriting__action--submit.prWriting__action--disabled",
+}
+TEKS_TULISAN = "The waiter says that the two women ordered food and drinks at the restaurant."  # tak dinilai (keputusan pemilik akun)
+MIN_KATA_TULISAN = 5
 MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
@@ -285,6 +295,34 @@ def isi_teks_bebas(page, timeout=TIMEOUT_MS):
     return True
 
 
+def isi_tulisan(page, timeout=TIMEOUT_MS):
+    """Soal menulis (prWriting): ketik kalimat Inggris di editor TinyMCE, tunggu penghitung kata cukup, klik Done.
+    Berhasil kalau editor terkunci (contenteditable=false), seperti pada rekaman pengguna. Modal peringatan
+    ("Oops...") atau editor tak terkunci = berhenti; modalnya tidak ditutup diam-diam."""
+    log = setup_logger()
+    if not page.locator(TULISAN["area"]).count():
+        return False
+    editor = page.frame_locator(TULISAN["editor"]).locator("body#tinymce")
+    if editor.get_attribute("contenteditable", timeout=timeout) == "false":
+        log.info("Soal menulis sudah terkunci (sudah dikerjakan)")
+        return True
+    log.info("Isi tulisan: %d kata", len(TEKS_TULISAN.split()))
+    editor.click(timeout=timeout)
+    page.keyboard.type(TEKS_TULISAN)
+    periksa(page, "tulisan_kata_cukup", lambda: page.wait_for_function(
+        "([s, n]) => parseInt(document.querySelector(s).textContent, 10) >= n",
+        arg=[TULISAN["kata"], MIN_KATA_TULISAN], timeout=timeout))
+    periksa(page, "tulisan_done_aktif", lambda: expect(page.locator(TULISAN["done_nonaktif"])).to_have_count(0, timeout=timeout))
+    click(page, page.locator(TULISAN["done"]), "tulisan_done", timeout)
+    try:
+        expect(editor).to_have_attribute("contenteditable", "false", timeout=min(timeout, 8000))
+    except AssertionError:
+        screenshot_on_fail(page, "tulisan_tak_diterima")
+        raise JenisSoalTidakDikenal("Done tidak diterima situs (ada peringatan validasi atau editor tak terkunci).")
+    log.info("OK: tulisan_terkunci")
+    return True
+
+
 def klik_start(page, timeout=TIMEOUT_MS):
     start = page.locator(SEL["start"])
     if not start.count():
@@ -313,7 +351,8 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     log = setup_logger()
     instruksi = page.locator(SEL["instruksi"])
     teks = instruksi.first.inner_text().strip() if instruksi.count() else ""
-    if TIDAK_DIDUKUNG.match(teks) and not page.locator(f"{TEKS_BEBAS}:visible").count():  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
+    if (TIDAK_DIDUKUNG.match(teks) and not page.locator(f"{TEKS_BEBAS}:visible").count()
+            and not page.locator(TULISAN["area"]).count()):  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
         screenshot_on_fail(page, "instruksi_belum_didukung")
         raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks[:60]!r}")
     belum = elemen_belum_didukung(page)  # sebelum mengklik apa pun
@@ -333,6 +372,8 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     if isi_teks_bebas(page, timeout):
         dikerjakan.append("isian teks")
         perlu_cek = True
+    if isi_tulisan(page, timeout):
+        dikerjakan.append("tulisan")  # Done tidak butuh Check Answer
     if isi_seret(page, SEL["cloze_kotak"], SEL["cloze_kata"], "cloze", timeout):
         dikerjakan.append("isian kata")
         perlu_cek = True

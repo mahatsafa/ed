@@ -583,6 +583,45 @@ with sync_playwright() as pw:
           and raises(lambda: pelajaran.selesaikan_reminder(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
     page.close()
 
+    # --- Soal menulis prWriting (potongan HTML meniru rekaman: TinyMCE di iframe, Done, modal "Oops") ---
+    def halaman_tulis(tolak=False):
+        return ('<div class="learning__headerIW">Type your answer in the box and click Done.</div>'
+                '<div class="prWriting__practice"><div class="prWriting__editorW">'
+                '<span class="prWriting__editorWords">0</span>'
+                '<iframe id="mce_0_ifr" style="width:300px;height:100px" srcdoc=\'<body id="tinymce" contenteditable="true"></body>\'></iframe>'
+                '<span class="prWriting__action prWriting__action--submit prWriting__action--disabled">Done</span>'
+                '</div></div><div class="prWriting__validationAlertBtn" style="display:none">OK</div>'
+                '<script>const f = document.getElementById("mce_0_ifr"), done = document.querySelector(".prWriting__action--submit");'
+                'const tolak = ' + ("true" if tolak else "false") + ';'
+                '(function pasang() { const b = f.contentDocument && f.contentDocument.body;'
+                ' if (!b || b.id !== "tinymce") { setTimeout(pasang, 50); return; }'
+                ' b.addEventListener("input", () => { const n = b.innerText.trim().split(/\\s+/).filter(Boolean).length;'
+                '  document.querySelector(".prWriting__editorWords").textContent = n;'
+                '  done.classList.toggle("prWriting__action--disabled", n === 0); });'
+                ' done.addEventListener("click", () => { const n = +document.querySelector(".prWriting__editorWords").textContent;'
+                '  if (tolak || n < 5) document.querySelector(".prWriting__validationAlertBtn").style.display = "block";'
+                '  else b.setAttribute("contenteditable", "false"); }); })();</script>')
+    page = browser.new_page()
+    page.set_content(halaman_tulis())
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    pelajaran.kerjakan_halaman(page, ring, 6000)  # instruksi "Type ..." tidak lagi menghentikan bot di halaman menulis
+    check("menulis: kalimat Inggris >= 5 kata diketik, Done diklik, editor terkunci",
+          page.frame_locator("#mce_0_ifr").locator("body#tinymce").get_attribute("contenteditable") == "false"
+          and int(page.inner_text(".prWriting__editorWords")) >= pelajaran.MIN_KATA_TULISAN
+          and page.locator(".prWriting__validationAlertBtn").is_hidden())
+    check("menulis: sudah terkunci -> tidak diketik ulang", pelajaran.isi_tulisan(page, 3000) is True)
+    page.close()
+    page = browser.new_page()
+    page.set_content('<p>bukan halaman menulis</p>')
+    check("menulis: tanpa area prWriting -> False", pelajaran.isi_tulisan(page, 2000) is False)
+    page.close()
+    page = browser.new_page()
+    page.set_content(halaman_tulis(tolak=True))  # situs menolak: modal Oops muncul, editor tak terkunci
+    check("menulis: Done ditolak (modal) -> berhenti, modal tak ditutup diam-diam",
+          raises(lambda: pelajaran.isi_tulisan(page, 3000), pelajaran.JenisSoalTidakDikenal)
+          and page.locator(".prWriting__validationAlertBtn").is_visible())
+    page.close()
+
     # --- Diagnosa (baca saja) di halaman tiruan ---
     page = browser.new_page()
     page.goto(URL_ASLI)
