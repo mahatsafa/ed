@@ -101,6 +101,11 @@ def putar_video(page, timeout=TIMEOUT_MS):
     overlay = page.locator(SEL["video_overlay"])
     kustom = page.locator(SEL["video_kustom"])
     video = page.locator(SEL["video"]).first
+    if video.count() and not overlay.count():  # situs asli: tombol putar muncul sesaat setelah halaman
+        try:                                    # tampil; kalau video diklik dulu, tombol itu menghalanginya
+            overlay.first.wait_for(state="visible", timeout=min(timeout, 3000))
+        except PWTimeout:
+            pass
     if overlay.count() and overlay.first.is_visible():
         click(page, overlay.first, "video_tombol_putar", timeout)
     elif kustom.count() and kustom.is_visible():
@@ -339,9 +344,61 @@ def lanjut(page, timeout=TIMEOUT_MS):
     return True
 
 
+REMINDER = re.compile(r"You need to complete the activity (\d+)")
+SEL_PAGER = ".learning__tasksNav_tasksW .learning__tasksNav_task"  # nomor halaman di bawah
+MAX_PERCOBAAN_REMINDER = 5  # batas siklus "tetap di step" per jendela Reminder
+
+
+def reminder_terlihat(page):
+    teks = page.get_by_text(REMINDER)
+    return teks.count() > 0 and teks.first.is_visible()
+
+
+def ke_halaman(page, nomor, timeout=TIMEOUT_MS):
+    """Pindah ke halaman soal bernomor `nomor` (mulai 1) lewat pager bawah."""
+    item = page.locator(SEL_PAGER).nth(nomor - 1)
+    click(page, item, f"pager_{nomor}", timeout)
+    periksa(page, f"pager_{nomor}_aktif", lambda: expect(item).to_have_class(re.compile(r"--current"), timeout=timeout))
+    tunggu_stabil(page)
+
+
+def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
+    """Jendela "You need to complete the activity N": tetap di step, kerjakan halaman N, kembali ke halaman
+    terakhir, Next lagi. N sudah pernah dicoba, halaman N tak bisa dikerjakan, atau batas siklus = klik
+    Continue (lewati). Kembalikan "lanjut" (jendela hilang) atau "lewat" (step dilewati)."""
+    log = setup_logger()
+    dicoba = set()
+    for _ in range(MAX_PERCOBAAN_REMINDER):
+        if not reminder_terlihat(page):
+            return "lanjut"
+        cocok = REMINDER.search(page.get_by_text(REMINDER).first.inner_text())
+        nomor = int(cocok.group(1)) if cocok else None
+        jumlah = page.locator(SEL_PAGER).count()
+        if nomor is None or nomor in dicoba or not 1 <= nomor <= jumlah:
+            break
+        dicoba.add(nomor)
+        log.info("Reminder: aktivitas %d belum selesai; tetap di step dan mengerjakannya.", nomor)
+        click(page, page.get_by_text("Stay in this step", exact=True).first, "reminder_tetap_di_step", timeout)
+        ke_halaman(page, nomor, timeout)
+        try:
+            kerjakan_halaman(page, ringkasan, timeout)
+        except JenisSoalTidakDikenal as err:
+            log.warning("Aktivitas %d tak bisa dikerjakan bot (%s); akan dilewati.", nomor, err)
+        ke_halaman(page, jumlah, timeout)
+        lanjut(page, timeout)
+    if reminder_terlihat(page):
+        log.warning("Reminder tak terselesaikan; klik Continue (step dilewati).")
+        screenshot_on_fail(page, "reminder_dilewati")
+        click(page, page.get_by_text("Continue", exact=True).first, "reminder_continue", timeout)
+        tunggu_stabil(page)
+        return "lewat"
+    return "lanjut"
+
+
 def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
     """Kerjakan halaman satu per satu lalu Next. Kembalikan alasan berhenti:
-    "habis" (Next tidak mengubah halaman), "test" (step Test, dikerjakan manual), "batas".
+    "habis" (Next tidak mengubah halaman), "test" (step Test, dikerjakan manual), "lewat" (step dilewati
+    lewat Continue di jendela Reminder), "batas".
     tanya (opsional): dipanggil tanya(page, alasan) kalau bot tak tahu cara mengerjakan halaman; harus menunggu
     pengguna selesai mengerjakannya sendiri (sambil merekam), lalu bot lanjut Next. Tanpa tanya: bot berhenti (gagal tertutup)."""
     log = setup_logger()
@@ -368,6 +425,8 @@ def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
         if not lanjut(page, timeout):
             log.info("Next tidak mengubah halaman.")
             return "habis"
+        if reminder_terlihat(page) and selesaikan_reminder(page, ringkasan, timeout) == "lewat":
+            return "lewat"
     log.warning("Batas %d halaman tercapai, berhenti.", maks)
     return "batas"
 
@@ -527,7 +586,7 @@ def buka_kunci_lesson(page, timeout=TIMEOUT_MS):
     return False
 
 
-def cari_target(page, dilewati, timeout=TIMEOUT_MS):
+def cari_target(page, dilewati, timeout=TIMEOUT_MS, lewat_step=frozenset()):
     """Cari (lesson, indeks step, nama step) pertama yang belum selesai dan bukan step manual.
     Lesson yang hanya tersisa step manual dicatat di `dilewati` (per unit). Tidak ada = None."""
     for li, lesson in enumerate(baca_daftar(page, "lessons")):  # batas atas = jumlah lesson
@@ -537,17 +596,18 @@ def cari_target(page, dilewati, timeout=TIMEOUT_MS):
             return None
         pilih_item(page, "lessons", li, timeout)
         for si, step in enumerate(baca_daftar(page, "steps")):  # batas atas = jumlah step
-            if step["status"] != "done" and not STEP_MANUAL.search(step["nama"]):
+            if (step["status"] != "done" and not STEP_MANUAL.search(step["nama"])
+                    and (lesson["nama"], step["nama"]) not in lewat_step):  # lewat_step: dilewati via Reminder
                 return lesson["nama"], si, step["nama"]
         dilewati.add(lesson["nama"])
     return None
 
 
-def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS):
+def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS, lewat_step=frozenset()):
     """Dari area belajar: pilih lesson pertama yang belum selesai, lalu step pertama yang belum selesai
     (bukan Test), dan tunggu halaman pertamanya siap. None kalau unit ini habis."""
     log = setup_logger()
-    target = cari_target(page, dilewati, timeout)
+    target = cari_target(page, dilewati, timeout, lewat_step)
     if target is None:
         return None
     if target in dicoba:  # sudah pernah dikerjakan tapi status belum selesai: jangan berputar-putar
@@ -628,7 +688,7 @@ def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN,
             if unit is None:
                 log.info("Semua unit selesai (selain step Test).")
                 break
-        dilewati, dicoba = set(), set()  # nama lesson berulang antar unit, jadi dicatat per unit
+        dilewati, dicoba, lewat_step = set(), set(), set()  # nama lesson berulang antar unit, jadi dicatat per unit
         while True:
             langkah += 1
             if langkah > MAX_STEP or ringkasan["halaman"] >= maks_halaman:
@@ -636,14 +696,16 @@ def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN,
                 if not hanya_baca:
                     klik_header(page, timeout)
                 break
-            target = buka_lesson_berikutnya(page, dilewati, dicoba, timeout)
+            target = buka_lesson_berikutnya(page, dilewati, dicoba, timeout, lewat_step)
             if target is None:
                 break
             if hanya_baca:
                 catat_rencana(page, unit, target[0], rencana, timeout)
                 dilewati.add(target[0])  # lanjut ke lesson berikutnya tanpa menjawab apa pun
                 continue
-            kerjakan_berurutan(page, ringkasan, maks_halaman - ringkasan["halaman"], timeout, tanya)
+            if kerjakan_berurutan(page, ringkasan, maks_halaman - ringkasan["halaman"], timeout, tanya) == "lewat":
+                lewat_step.add((target[0], target[2]))
+                ringkasan["step_dilewati"] = ringkasan.get("step_dilewati", 0) + 1
         if langkah > MAX_STEP or ringkasan["halaman"] >= maks_halaman:
             return ringkasan
         kembali_ke_dashboard(page, timeout)

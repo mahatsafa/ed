@@ -350,6 +350,15 @@ with sync_playwright() as pw:
     page.close()
 
     page = browser.new_page()
+    page.goto(URL_KURSUS)
+    pelajaran.buka_unit(page, set(), 4000)
+    awal = pelajaran.cari_target(page, set(), 4000)
+    lain = pelajaran.cari_target(page, set(), 4000, {(awal[0], awal[2])})
+    check("kursus: step yang dilewati (lewat_step) tidak dipilih lagi, step berikutnya dipilih",
+          awal is not None and lain is not None and (lain[0], lain[2]) != (awal[0], awal[2]))
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_ASLI)
     check("kursus: halaman bukan dashboard/area belajar -> ditolak",
           raises(lambda: pelajaran.jalankan_pelajaran(page, timeout=2000), pelajaran.JenisSoalTidakDikenal))
@@ -456,6 +465,52 @@ with sync_playwright() as pw:
     page.set_content("".join('<textarea class="prOpenEnded__qaItemText--textarea"></textarea>' for _ in range(pelajaran.MAX_TEKS_BEBAS + 1)))
     check("dikte: terlalu banyak textarea -> berhenti (batas atas)",
           raises(lambda: pelajaran.isi_teks_bebas(page, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+
+    # --- Reminder dan video terlambat (potongan HTML) ---
+    def app_reminder(halaman2):
+        return ('<div class="learning__tasksNav_tasksW">' + "".join(
+            f'<div class="learning__tasksNav_task{" learning__tasksNav_task--current" if i == 3 else ""}">{i}</div>'
+            for i in (1, 2, 3)) + '</div><div id="isi">halaman 3</div>' + halaman2 +
+            '<a class="tasksBtnext" href="#">Next</a>'
+            '<div id="rem" style="display:none"><p>You need to complete the activity 2 to achieve progress in this step.</p>'
+            '<a id="c" href="#">Continue</a> <a id="s" href="#">Stay in this step</a></div>'
+            '<script>let aktif = 3, selesai2 = false, kata = "";'
+            'const item = [...document.querySelectorAll(".learning__tasksNav_task")];'
+            'const pilih = (n) => { aktif = n; item.forEach((e, i) => e.classList.toggle("learning__tasksNav_task--current", i + 1 === n));'
+            ' document.getElementById("isi").textContent = "halaman " + n + kata; if (n === 2) selesai2 = !document.querySelector("input[type=text]"); };'
+            'item.forEach((e, i) => e.addEventListener("click", () => pilih(i + 1)));'
+            'document.querySelector(".tasksBtnext").addEventListener("click", (ev) => { ev.preventDefault();'
+            ' if (aktif === 3 && !selesai2) document.getElementById("rem").style.display = "block";'
+            ' else if (aktif === 3) { kata = " selesai"; pilih(3); } });'
+            'document.getElementById("s").addEventListener("click", (ev) => { ev.preventDefault(); document.getElementById("rem").style.display = "none"; });'
+            'document.getElementById("c").addEventListener("click", (ev) => { ev.preventDefault(); document.getElementById("rem").style.display = "none"; window.lewat = true; });'
+            '</script>')
+    page = browser.new_page()
+    page.set_content(app_reminder("<p>artikel</p>"))
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    page.click(".tasksBtnext")
+    check("reminder: jendela terdeteksi", pelajaran.reminder_terlihat(page) is True)
+    check("reminder: tetap di step, kerjakan halaman 2, balik, Next lagi -> lanjut",
+          pelajaran.selesaikan_reminder(page, ring, 3000) == "lanjut" and "selesai" in page.inner_text("#isi")
+          and not pelajaran.reminder_terlihat(page))
+    page.close()
+    page = browser.new_page()  # halaman baru: skrip tiruan memakai let global
+    page.set_content(app_reminder('<input type="text">'))  # halaman 2 punya isian teks: tak bisa dikerjakan bot
+    page.click(".tasksBtnext")
+    check("reminder: halaman tak bisa dikerjakan -> Continue (step dilewati)",
+          pelajaran.selesaikan_reminder(page, ring, 3000) == "lewat" and page.evaluate("() => window.lewat === true"))
+    page.close()
+    page = browser.new_page()
+    page.set_content('<video id="MP" width="100" height="60"></video>'
+                     '<script>window.klik = "";'
+                     'document.getElementById("MP").addEventListener("click", () => { window.klik += "video"; });'
+                     'setTimeout(() => { const o = document.createElement("div"); o.className = "learning__RAMRButton learning__RAMRButton--play";'
+                     'o.style.cssText = "position:absolute;left:0;top:0;width:100px;height:60px;";'
+                     'o.addEventListener("click", () => { window.klik += "tombol"; }); document.body.appendChild(o); }, 700);</script>')
+    raises(lambda: pelajaran.putar_video(page, 4000), Exception)  # tak ada media sungguhan: pemeriksaan "terputar" gagal
+    check("video: tombol putar yang muncul terlambat dipakai, bukan elemen video",
+          page.evaluate("() => window.klik") == "tombol")
     page.close()
 
     # --- Diagnosa (baca saja) di halaman tiruan ---
