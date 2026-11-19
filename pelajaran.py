@@ -467,6 +467,8 @@ REMINDER_MEDIA = re.compile(r"You need to play the video/audio")
 JUDUL_REMINDER = re.compile(r"^\s*Reminder!\s*$")
 SEL_PAGER = ".learning__tasksNav_tasksW .learning__tasksNav_task"  # nomor halaman di bawah
 MAX_PERCOBAAN_REMINDER = 5  # batas siklus "tetap di step" per jendela Reminder
+MAX_SINKRON_REMINDER = 8  # batas siklus tunggu untuk Reminder basi (aktivitas sudah --done di pager)
+JEDA_SINKRON_MS = 8000  # situs asli terlambat menyinkronkan progres ±40 dtk
 
 
 def cari_teks(page, pola, exact=False):
@@ -516,7 +518,8 @@ def tunggu_reminder(page):
 def ke_halaman(page, nomor, timeout=TIMEOUT_MS):
     """Pindah ke halaman soal bernomor `nomor` (mulai 1) lewat pager bawah."""
     item = page.locator(SEL_PAGER).nth(nomor - 1)
-    click(page, item, f"pager_{nomor}", timeout)
+    if "--current" not in (item.get_attribute("class", timeout=timeout) or ""):  # sudah di halaman itu: kliknya tak perlu (dan bisa terhalang panel)
+        click(page, item, f"pager_{nomor}", timeout)
     periksa(page, f"pager_{nomor}_aktif", lambda: expect(item).to_have_class(re.compile(r"--current"), timeout=timeout))
     tunggu_stabil(page)
 
@@ -526,8 +529,8 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
     terakhir, Next lagi. N sudah pernah dicoba, halaman N tak bisa dikerjakan, atau batas siklus = klik
     Continue (lewati). Kembalikan "lanjut" (jendela hilang) atau "lewat" (step dilewati)."""
     log = setup_logger()
-    dicoba = set()
-    for _ in range(MAX_PERCOBAAN_REMINDER):
+    dicoba, sinkron = set(), 0
+    for _ in range(MAX_PERCOBAAN_REMINDER + MAX_SINKRON_REMINDER):
         if not tunggu_reminder(page):  # kartu Reminder (iframe MsgPage.html) memuat belakangan; jangan simpulkan "hilang" terlalu cepat
             return "lanjut"
         if cari_teks(page, REMINDER_MEDIA):  # video/audio belum diputar sampai habis: tetap, putar, Next lagi
@@ -546,7 +549,18 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
             raise JenisSoalTidakDikenal("Jendela Reminder dengan teks yang tak dikenal bot.")
         jumlah = page.locator(SEL_PAGER).count()
         daftar = [int(x) for x in re.findall(r"\d+", REMINDER.search(ada.inner_text()).group(1))]
-        nomor = next((n for n in daftar if n not in dicoba and 1 <= n <= jumlah), None)  # satu aktivitas per siklus
+        basi = {n for n in daftar if 1 <= n <= jumlah  # pager sudah menandai selesai: situs belum menyinkronkan
+                and "--done" in (page.locator(SEL_PAGER).nth(n - 1).get_attribute("class") or "")}
+        nomor = next((n for n in daftar if n not in dicoba and n not in basi and 1 <= n <= jumlah), None)  # satu per siklus
+        if nomor is None and basi and sinkron < MAX_SINKRON_REMINDER:
+            sinkron += 1
+            log.info("Reminder menagih aktivitas %s yang sudah bertanda selesai; menunggu situs menyinkronkan (%d/%d).",
+                     sorted(basi), sinkron, MAX_SINKRON_REMINDER)
+            click(page, cari_teks(page, "Stay in this step", exact=True), "reminder_tetap_di_step", timeout)
+            page.wait_for_timeout(JEDA_SINKRON_MS)
+            ke_halaman(page, jumlah, timeout)
+            lanjut(page, timeout)
+            continue
         if nomor is None:
             break
         dicoba.add(nomor)

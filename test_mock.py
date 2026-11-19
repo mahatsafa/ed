@@ -711,6 +711,39 @@ with sync_playwright() as pw:
     check("status step: sudah done -> True langsung", pelajaran.tunggu_step_selesai(page, 1, detik=4) is True)
     page.close()
 
+    # --- Reminder basi: pager sudah --done tapi situs belum menyinkronkan (situs asli Lesson 2, 13:16) ---
+    def reminder_basi(kelas3="learning__tasksNav_task--done learning__tasksNav_task--current"):
+        return ('<div class="learning__tasksNav_tasksW">'
+                '<div class="learning__tasksNav_task learning__tasksNav_task--done">1</div>'
+                '<div class="learning__tasksNav_task learning__tasksNav_task--done">2</div>'
+                f'<div class="learning__tasksNav_task {kelas3}">3</div></div>'
+                '<div id="isi">awal</div><a class="tasksBtnext" href="#">Next</a>'
+                '<div id="rem" style="display:none"><p>You need to complete the activity 2 to achieve progress in this step.</p>'
+                '<a id="c" href="#">Continue</a> <a id="s" href="#">Stay in this step</a></div>'
+                '<script>let n = 0; window.klikPager = 0; window.lewat = false;'
+                'document.querySelectorAll(".learning__tasksNav_task").forEach((e) => e.addEventListener("click", () => { window.klikPager++; }));'
+                'document.querySelector(".tasksBtnext").addEventListener("click", (ev) => { ev.preventDefault(); n++;'
+                ' if (n < 3) document.getElementById("rem").style.display = "block"; else document.getElementById("isi").textContent = "akhir"; });'
+                'document.getElementById("s").addEventListener("click", (ev) => { ev.preventDefault(); document.getElementById("rem").style.display = "none"; });'
+                'document.getElementById("c").addEventListener("click", (ev) => { ev.preventDefault(); window.lewat = true; });</script>')
+    asli_jeda = pelajaran.JEDA_SINKRON_MS
+    pelajaran.JEDA_SINKRON_MS = 200
+    page = browser.new_page()
+    page.set_content(reminder_basi())
+    page.click(".tasksBtnext")  # Next pertama: Reminder menagih aktivitas 2 yang sudah --done
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    check("reminder basi (aktivitas sudah --done): tunggu sinkron, Next lagi -> lanjut; halaman tak dikerjakan ulang, Continue tak diklik",
+          pelajaran.selesaikan_reminder(page, ring, 3000) == "lanjut" and page.inner_text("#isi") == "akhir"
+          and page.evaluate("() => window.lewat") is False and page.evaluate("() => window.klikPager") == 0)  # 0: tak ada pindah halaman
+    page.close()
+    pelajaran.JEDA_SINKRON_MS = asli_jeda
+    page = browser.new_page()
+    page.set_content(reminder_basi())
+    pelajaran.ke_halaman(page, 3, 3000)
+    check("ke_halaman: sudah di halaman itu (--current) -> tidak mengklik pager",
+          page.evaluate("() => window.klikPager") == 0)
+    page.close()
+
     # --- Soal menulis prWriting (potongan HTML meniru rekaman: TinyMCE di iframe, Done, modal "Oops") ---
     def halaman_tulis(tolak=False):
         return ('<div class="learning__headerIW">Type your answer in the box and click Done.</div>'
