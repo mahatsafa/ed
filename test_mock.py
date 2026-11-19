@@ -436,6 +436,28 @@ with sync_playwright() as pw:
           len(json.loads((LOG_DIR / f"{awalan}_aksi.json").read_text(encoding="utf-8"))["aksi"]) == 3)
     page.close()
 
+    page = browser.new_page()
+    kotak_dikte = "".join(f'<div class="prOpenEnded__qaSet"><textarea class="prOpenEnded__qaItemText prOpenEnded__qaItemText--textarea"></textarea></div>' for _ in range(3))
+    dikte = ('<div class="learning__headerIW">Type the sentences that you hear in the dictation.</div>' + kotak_dikte
+             + '<ul><li id="CheckAnswer">Check</li></ul><a class="tasksBtnext" href="#">Next</a>')
+    page.set_content(dikte)
+    check("dikte: tiga textarea terisi, handler melapor dikerjakan",
+          pelajaran.isi_teks_bebas(page, 2000) is True
+          and page.eval_on_selector_all(".prOpenEnded__qaItemText--textarea", "els => els.every(e => e.value === 'a')"))
+    page.set_content(dikte)
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    pelajaran.kerjakan_halaman(page, ring, 2000)
+    check("dikte: instruksi 'Type ...' tidak lagi membuat bot berhenti; terisi dan Check Answer diklik",
+          page.eval_on_selector_all(".prOpenEnded__qaItemText--textarea", "els => els.every(e => e.value === 'a')"))
+    page.set_content('<div class="learning__headerIW">Type the answer.</div><textarea></textarea>'
+                     '<ul><li id="CheckAnswer">Check</li></ul><a class="tasksBtnext" href="#">Next</a>')
+    check("dikte: textarea lain (bukan prOpenEnded) tetap membuat bot berhenti",
+          raises(lambda: pelajaran.kerjakan_halaman(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.set_content("".join('<textarea class="prOpenEnded__qaItemText--textarea"></textarea>' for _ in range(pelajaran.MAX_TEKS_BEBAS + 1)))
+    check("dikte: terlalu banyak textarea -> berhenti (batas atas)",
+          raises(lambda: pelajaran.isi_teks_bebas(page, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+
     # --- Diagnosa (baca saja) di halaman tiruan ---
     page = browser.new_page()
     page.goto(URL_ASLI)

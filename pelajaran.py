@@ -57,8 +57,13 @@ MAX_HALAMAN = 30  # batas halaman per jalan
 # (Drag dan Match sudah punya handler: cloze dan pencocokan.)
 TIDAK_DIDUKUNG = re.compile(r"^\s*(Type|Write|Fill|Put|Record|Say|Speak|Order)\b")
 # Isian teks bebas yang terlihat di luar panel Dictionary: belum ada handler.
+# (textarea dikte prOpenEnded sudah punya handler: isi_teks_bebas)
 JS_ISIAN_TEKS = """() => [...document.querySelectorAll('textarea, [contenteditable=true], input[type=text]')]
-    .some(e => !e.closest('#DictionaryPanelContainer') && e.offsetParent !== null)"""
+    .some(e => !e.closest('#DictionaryPanelContainer') && !e.matches('.prOpenEnded__qaItemText--textarea')
+               && e.offsetParent !== null)"""
+TEKS_BEBAS = ".prOpenEnded__qaItemText--textarea"  # soal dikte/isian bebas: satu textarea per kalimat
+ISIAN_TEKS = "a"  # jawaban salah tidak masalah (keputusan pemilik akun); yang perlu: soal tercatat dikerjakan
+MAX_TEKS_BEBAS = 20  # batas textarea per halaman; lebih dari ini = bentuk halaman tak terduga, berhenti
 MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 TEKS_HALAMAN = "() => document.body.innerText.replace(/\\d/g, '')"  # angka dibuang (waktu video)
@@ -234,6 +239,24 @@ def halaman_bacaan(page):
     return page.evaluate(JS_HALAMAN_BACAAN, {"cek": SEL["cek"], "next": SEL["next"]})
 
 
+def isi_teks_bebas(page, timeout=TIMEOUT_MS):
+    """Soal dikte/isian bebas (prOpenEnded): isi tiap textarea yang terlihat dengan teks apa saja. Cara ini
+    dipelajari dari rekaman pengguna (ketik di textarea lalu Check Answer)."""
+    kotak = page.locator(f"{TEKS_BEBAS}:visible")
+    n = kotak.count()
+    if n == 0:
+        return False
+    if n > MAX_TEKS_BEBAS:
+        screenshot_on_fail(page, "teks_bebas_terlalu_banyak")
+        raise JenisSoalTidakDikenal(f"{n} kotak teks (batas {MAX_TEKS_BEBAS}).")
+    for i in range(n):
+        setup_logger().info("Isi teks: kotak_%d", i + 1)
+        kotak.nth(i).fill(ISIAN_TEKS, timeout=timeout)
+        kotak.nth(i).blur()  # memicu 'change' seperti pengguna yang berpindah kotak
+        periksa(page, f"teks_{i + 1}_terisi", lambda k=kotak.nth(i): expect(k).to_have_value(ISIAN_TEKS, timeout=timeout))
+    return True
+
+
 def klik_start(page, timeout=TIMEOUT_MS):
     start = page.locator(SEL["start"])
     if not start.count():
@@ -262,7 +285,7 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     log = setup_logger()
     instruksi = page.locator(SEL["instruksi"])
     teks = instruksi.first.inner_text().strip() if instruksi.count() else ""
-    if TIDAK_DIDUKUNG.match(teks):  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
+    if TIDAK_DIDUKUNG.match(teks) and not page.locator(f"{TEKS_BEBAS}:visible").count():  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
         screenshot_on_fail(page, "instruksi_belum_didukung")
         raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks[:60]!r}")
     belum = elemen_belum_didukung(page)  # sebelum mengklik apa pun
@@ -278,6 +301,9 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
         perlu_cek = True
     if isi_dropdown(page, timeout):
         dikerjakan.append("dropdown")
+        perlu_cek = True
+    if isi_teks_bebas(page, timeout):
+        dikerjakan.append("isian teks")
         perlu_cek = True
     if isi_seret(page, SEL["cloze_kotak"], SEL["cloze_kata"], "cloze", timeout):
         dikerjakan.append("isian kata")
@@ -435,7 +461,7 @@ def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
     if not sudah_aktif:
         click(page, item.locator(".learning__dropDownList_itemName"), f"pilih_{jenis}_{indeks + 1}", timeout)
         periksa(page, f"{jenis}_{indeks + 1}_aktif", lambda: expect(item).to_have_class(
-            re.compile(r"--current"), timeout=timeout))
+            re.compile(r"--current"), timeout=max(timeout, TUNGGU_AREA_MS)))  # pindah lesson di situs asli bisa >10 dtk
     tunggu_stabil(page)  # beri waktu daftar menutup sendiri sebelum dicek
     if daftar_terbuka(page, jenis):  # masih terbuka (mis. item sudah aktif): tutup supaya tidak menutupi soal
         tutup_daftar(page, jenis, timeout)
