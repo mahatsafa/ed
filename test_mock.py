@@ -614,6 +614,15 @@ with sync_playwright() as pw:
     check("video: putar_video menunggu media selesai (ended), bukan hanya mulai",
           pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.selesai") is True)
     page.close()
+    page = browser.new_page()  # situs asli (audio Lesson 3): saat selesai pemutar kembali ke 0, paused, ended false
+    page.set_content(media_palsu("2") + video_palsu + (
+        '<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
+        ' if (window.main) return; window.main = true; window.t = 0.5;'
+        ' setTimeout(() => { const v = document.querySelector("video"); window.main = false; window.t = 0; window.selesai = false;'
+        ' v.dispatchEvent(new Event("ended")); }, 1200); });</script>'))
+    check("video: pemutar yang kembali ke 0 saat selesai tetap terdeteksi lewat event 'ended'",
+          pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.t") == 0)
+    page.close()
     page = browser.new_page()
     page.set_content(media_palsu("NaN", "true") + '<video width="200" height="100"></video>')
     check("video: durasi tak terbaca (NaN) -> berhenti, tidak menunggu tanpa batas",

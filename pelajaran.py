@@ -83,6 +83,11 @@ MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
                  ".some(m => m.ended || (m.duration > 0 && m.currentTime >= m.duration - 0.5))")
+JS_PASANG_AKHIR = """() => { window.__botSelesai = false;
+  document.querySelectorAll('video,audio').forEach((m) => {
+    m.addEventListener('ended', () => { window.__botSelesai = true; });  // pemutar audio situs asli mengembalikan dirinya ke 0 saat selesai
+    m.addEventListener('timeupdate', () => { if (m.duration > 0 && m.currentTime >= m.duration - 0.5) window.__botSelesai = true; });
+  }); }"""  # state elemen saja tak cukup: keadaan "selesai" bisa hanya sekejap
 MEDIA_DURASI = ("() => { const m = [...document.querySelectorAll('video,audio')]"
                 ".find(m => !m.paused && m.currentTime > 0); return m ? m.duration : NaN; }")
 MAX_DURASI_MEDIA = 20 * 60  # detik; durasi tak terbaca atau lebih panjang dari ini = tak ditunggu, berhenti
@@ -152,8 +157,9 @@ def putar_video(page, timeout=TIMEOUT_MS):
         screenshot_on_fail(page, "durasi_media_tak_wajar")
         raise JenisSoalTidakDikenal(f"Durasi media tak terbaca atau di luar batas: {durasi!r}")
     setup_logger().info("Menunggu media selesai (%.0f detik)", durasi)
+    page.evaluate(JS_PASANG_AKHIR)
     periksa(page, "video_selesai", lambda: page.wait_for_function(
-        MEDIA_SELESAI, timeout=int((durasi + TAMBAHAN_TUNGGU_MEDIA) * 1000)))
+        f"() => window.__botSelesai === true || ({MEDIA_SELESAI})()", timeout=int((durasi + TAMBAHAN_TUNGGU_MEDIA) * 1000)))
     return True
 
 
