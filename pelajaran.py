@@ -38,6 +38,7 @@ SEL = {
     "webrtc": ".answersWrapper.webRtc",  # soal dengan pengenalan suara (butuh mikrofon)
     "start": ".speakingInteractButtonWrapper a.continue",
     "start_nonaktif": ".speakingInteractButtonWrapper .continueWrapper.disable",
+    "start_ulang": ".speakingInteractButtonWrapper a.continue.retry",  # setelah merekam: tombol berubah "Try again"
     "cek": "#CheckAnswer",
     "next": "a.tasksBtnext",
     "selesai": ".learning__tasksNav_task--done",
@@ -307,9 +308,8 @@ JS_DND_ASING = """(sel) => [...document.querySelectorAll('.dndZone')].filter((z)
 
 
 def elemen_belum_didukung(page):
-    """Nama elemen soal tanpa handler (suara, isian teks, zona seret asing) kalau ada di halaman; kalau tidak, None."""
-    if page.locator(SEL["webrtc"]).count():
-        return "suara (webRtc)"
+    """Nama elemen soal tanpa handler (isian teks, zona seret asing) kalau ada di halaman; kalau tidak, None.
+    (Soal suara webRtc sudah punya handler: rekam_suara.)"""
     asing = page.evaluate(JS_DND_ASING, [SEL["cloze_kotak"], SEL["cocok_kotak"], SEL["klas_zona"], SEL["gambar_kotak"]])
     if asing:
         return f"zona seret tanpa handler ({asing})"
@@ -380,6 +380,54 @@ def isi_tulisan(page, timeout=TIMEOUT_MS):
     return True
 
 
+JS_SENTUH_MIK = """async () => {
+  const gum = navigator.mediaDevices.getUserMedia({audio: true}).then(async (s) => {
+    await new Promise((r) => setTimeout(r, 1000)); s.getTracks().forEach((t) => t.stop()); });
+  await Promise.race([gum, new Promise((_, no) => setTimeout(() => no(new Error('batas 4 dtk')), 4000))]);
+}"""
+TUNGGU_SESI_MS = 15_000  # tunggu Start aktif (sesi Speech Recognition terbentuk)
+MAX_REKAM_MS = 30_000  # situs merekam otomatis ±8 dtk lalu menampilkan "Try again"
+
+
+def rekam_suara(page, ringkasan, timeout=TIMEOUT_MS):
+    """Soal suara (webRtc): cukup terekam, isi ucapan tak dinilai (keputusan pemilik akun). Tunggu Start aktif
+    (sesi baru terbentuk setelah mikrofon diakses: kalau lama, sentuh mikrofon sekali; izin sudah diberikan),
+    klik Start, lalu tunggu situs selesai merekam sendiri (tombol berubah "Try again"; tidak diklik). Sudah
+    "Try again" = sudah direkam. Sesi tak terbentuk = berhenti."""
+    log = setup_logger()
+    if not page.locator(SEL["webrtc"]).count():
+        return False
+    if page.locator(SEL["start_ulang"]).count():
+        log.info("Soal suara sudah direkam (Try again); tidak diklik.")
+        return True
+    nonaktif = page.locator(SEL["start_nonaktif"])
+    try:
+        expect(nonaktif).to_have_count(0, timeout=TUNGGU_SESI_MS)
+    except AssertionError:
+        log.info("Sesi suara belum terbentuk; menyentuh mikrofon sekali lalu menunggu lagi.")
+        try:
+            page.evaluate(JS_SENTUH_MIK)
+        except Exception as err:  # izin ditolak / perangkat tak ada
+            log.warning("Mikrofon tak bisa diakses: %s", str(err).splitlines()[0][:120])
+        try:
+            expect(nonaktif).to_have_count(0, timeout=TUNGGU_SESI_MS)
+        except AssertionError:
+            screenshot_on_fail(page, "sesi_suara_tak_terbentuk")
+            raise JenisSoalTidakDikenal("Sesi Speech Recognition tak terbentuk (Start tetap nonaktif).")
+    sebelum = page.locator(SEL["selesai"]).count()
+    click(page, page.locator(SEL["start"]), "tombol_rekam", timeout)
+    periksa(page, "rekaman_selesai", lambda: expect(page.locator(SEL["start_ulang"])).to_have_count(1, timeout=MAX_REKAM_MS))
+    try:
+        page.wait_for_function("([s, n]) => document.querySelectorAll(s).length > n",
+                               arg=[SEL["selesai"], sebelum], timeout=min(timeout, 8000))
+        log.info("OK: tugas tercatat selesai")
+    except PWTimeout:
+        ringkasan["tak_terverifikasi"] += 1
+        log.warning("Soal suara TIDAK terbukti tercatat selesai setelah merekam")
+        screenshot_on_fail(page, "suara_tak_terverifikasi")
+    return True
+
+
 def klik_start(page, timeout=TIMEOUT_MS):
     start = page.locator(SEL["start"])
     if not start.count():
@@ -409,7 +457,7 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     instruksi = page.locator(SEL["instruksi"])
     teks = instruksi.first.inner_text().strip() if instruksi.count() else ""
     if (TIDAK_DIDUKUNG.match(teks) and not page.locator(f"{TEKS_BEBAS}:visible").count()
-            and not page.locator(TULISAN["area"]).count()):  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
+            and not page.locator(TULISAN["area"]).count() and not page.locator(SEL["webrtc"]).count()):  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
         screenshot_on_fail(page, "instruksi_belum_didukung")
         raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks[:60]!r}")
     belum = elemen_belum_didukung(page)  # sebelum mengklik apa pun
@@ -443,7 +491,9 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     if isi_klasifikasi(page, timeout):
         dikerjakan.append("klasifikasi")
         perlu_cek = True
-    if klik_start(page, timeout):
+    if rekam_suara(page, ringkasan, timeout):
+        dikerjakan.append("suara")
+    elif klik_start(page, timeout):  # Start di soal suara sudah diklik oleh rekam_suara
         dikerjakan.append("start")
     if not dikerjakan and halaman_bacaan(page):
         log.info("Halaman bacaan (tanpa soal): cukup Next")

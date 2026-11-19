@@ -49,7 +49,8 @@ if (skenario === "cocok") tugas = ["cocok"];  // hanya soal pencocokan
 if (skenario === "klasifikasi") tugas = ["klasifikasi"];  // prCl: item bank dibagi ke kolom True/False
 if (skenario === "gambar") tugas = ["gambar"];  // prTextToPic: kata ke gambar
 if (skenario === "dndasing") tugas = ["dndasing"];  // zona seret yang tak dikenal bot
-if (skenario === "mikrofon") tugas = ["mikrofon"];  // soal suara (webRtc): belum didukung
+if (skenario === "mikrofon") tugas = ["mikrofon"];  // soal suara (webRtc): cukup direkam
+if (skenario === "mikrofonmacet") tugas = ["mikrofon"];  // sesi suara tak pernah terbentuk (Start tetap nonaktif)
 if (skenario === "teksbebas") tugas = ["teksbebas"];  // textarea tanpa kata "Type" di instruksi
 window.opsiKlik = 0;
 if (skenario === "kosong") tugas = ["kosong"];  // tidak ada kontrol soal yang dikenal
@@ -100,8 +101,20 @@ function gambar() {
   } else if (jenis === "mikrofon") {
     $("#petunjuk").textContent = "What's the best response to the statement?";
     area.innerHTML = '<div class="answersWrapper mcq webRtc"><div class="lessonMultipleAnswer">Why not?</div>' +
-      '<div class="lessonMultipleAnswer">Let\'s go!</div></div>';
+      '<div class="lessonMultipleAnswer">Let\'s go!</div>' +
+      '<div class="speakingInteractButtonWrapper"><div class="buttonWrapper continueWrapper disable"><a class="button continue">Start</a></div></div></div>';
     area.querySelectorAll(".lessonMultipleAnswer").forEach((e) => e.addEventListener("click", () => { window.opsiKlik += 1; }));
+    // Seperti situs asli: Start baru aktif setelah sesi terbentuk; klik -> merekam otomatis -> "Try again"; pager langsung --done.
+    if (skenario !== "mikrofonmacet") setTimeout(() => { const w = $(".continueWrapper"); if (w) w.classList.remove("disable"); }, 800);
+    window.rekam = window.rekam || 0;
+    $(".continue").addEventListener("click", (e) => {
+      const a = e.currentTarget;
+      if ($(".continueWrapper").classList.contains("disable") || a.classList.contains("pressed") || a.classList.contains("retry")) return;
+      window.rekam += 1; a.classList.add("pressed");
+      area.insertAdjacentHTML("beforeend", '<div class="questionAnswersSet recorder"></div>');
+      tandaiSelesai();
+      setTimeout(() => { a.classList.remove("pressed"); a.classList.add("retry"); a.textContent = "Try again"; $(".recorder")?.remove(); }, 1200);
+    });
   } else if (jenis === "teksbebas") {
     $("#petunjuk").textContent = "Answer the question.";
     area.innerHTML = '<textarea id="ta" rows="2" cols="30"></textarea>';

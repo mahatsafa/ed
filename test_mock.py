@@ -212,10 +212,32 @@ with sync_playwright() as pw:
 
     page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=mikrofon")
-    check("pelajaran: soal suara (webRtc) -> berhenti, 0 opsi diklik, tidak selesai",
+    ring, alasan = berurutan(page)
+    check("pelajaran: soal suara (webRtc): Start diklik sekali, direkam sampai 'Try again', 0 opsi diklik, tercatat selesai",
+          ring == {"halaman": 1, "tak_terverifikasi": 0} and alasan == "habis"
+          and page.evaluate("() => window.rekam") == 1 and page.evaluate("() => window.opsiKlik") == 0
+          and page.locator(".continue.retry").count() == 1
+          and page.locator(".learning__tasksNav_task--done").count() == 1)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=mikrofonmacet")
+    asli_sesi = pelajaran.TUNGGU_SESI_MS
+    pelajaran.TUNGGU_SESI_MS = 1000
+    check("pelajaran: sesi suara tak terbentuk (Start tetap nonaktif) -> berhenti, tidak direkam, 0 opsi diklik",
           raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)
-          and page.evaluate("() => window.opsiKlik") == 0
+          and page.evaluate("() => window.rekam") == 0 and page.evaluate("() => window.opsiKlik") == 0
           and page.locator(".learning__tasksNav_task--done").count() == 0)
+    pelajaran.TUNGGU_SESI_MS = asli_sesi
+    page.close()
+
+    page = browser.new_page()  # halaman yang sudah direkam ('Try again' tampil): tidak direkam ulang
+    page.set_content('<div class="answersWrapper mcq webRtc"><div class="speakingInteractButtonWrapper">'
+                     '<div class="buttonWrapper continueWrapper"><a class="button continue retry">Try again</a></div></div></div>'
+                     '<script>window.klik = 0; document.querySelector(".continue").addEventListener("click", () => { window.klik++; });</script>')
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    check("suara: sudah 'Try again' -> dianggap direkam, tombol tidak diklik",
+          pelajaran.rekam_suara(page, ring, 3000) is True and page.evaluate("() => window.klik") == 0)
     page.close()
 
     page = browser.new_page()
