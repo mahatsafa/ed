@@ -547,6 +547,12 @@ def lepas_reminder_pindah(page, sudah_pindah, detik=TUNGGU_PINDAH_DETIK):
         page.wait_for_timeout(JEDA_POLL_MS)
 
 
+def tutup_reminder_terbuka(page):
+    """Reminder yang masih terbuka sebelum bot menavigasi (sisa jalan sebelumnya; situs asli 14:06) menghalangi klik
+    pertama. Bot memang akan berpindah, jadi Continue; step itu dipilih lagi nanti bila belum selesai."""
+    lepas_reminder_pindah(page, lambda: not overlay_menutupi(page) and not reminder_terlihat(page), detik=10)
+
+
 def ke_halaman(page, nomor, timeout=TIMEOUT_MS):
     """Pindah ke halaman soal bernomor `nomor` (mulai 1) lewat pager bawah."""
     item = page.locator(SEL_PAGER).nth(nomor - 1)
@@ -746,6 +752,7 @@ def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
     """Buka dropdown lesson/step, klik item ke-`indeks`, tunggu item itu jadi yang aktif."""
     daftar = page.locator(f"#learning__dropDownListW_{jenis}")
     item = daftar.locator(SEL["item_daftar"]).nth(indeks)
+    tutup_reminder_terbuka(page)
     if not daftar_terbuka(page, jenis):
         click(page, page.locator(f"#learning__dropDownListTitleW_{jenis}"), f"buka_daftar_{jenis}", timeout)
         periksa(page, f"daftar_{jenis}_terbuka", lambda: page.wait_for_function(
@@ -916,6 +923,7 @@ def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
 
 def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
     tunggu = max(timeout, TUNGGU_DASHBOARD_MS)  # klik menunggu navigasi; situs asli kadang >10 detik
+    tutup_reminder_terbuka(page)
     click(page, page.locator(SEL["rumah"]), "ikon_rumah", tunggu)
     lepas_reminder_pindah(page, lambda: page.locator(SEL["kartu_unit"]).count() > 0)
     wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", tunggu)
