@@ -513,6 +513,59 @@ with sync_playwright() as pw:
           page.evaluate("() => window.klik") == "tombol")
     page.close()
 
+    # --- Video harus diputar sampai habis; Reminder media di iframe (potongan HTML, properti media dipalsukan) ---
+    def media_palsu(durasi_js, main_js="false"):
+        return ('<script>window.main = ' + main_js + '; window.t = 1; window.selesai = false; window.dur = ' + durasi_js + ';'
+                'const P = HTMLMediaElement.prototype;'
+                'Object.defineProperty(P, "paused", {get: () => !window.main});'
+                'Object.defineProperty(P, "currentTime", {get: () => window.t});'
+                'Object.defineProperty(P, "duration", {get: () => window.dur});'
+                'Object.defineProperty(P, "ended", {get: () => window.selesai});</script>')
+    mulai_palsu = ('<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
+                   ' if (window.main) return; window.main = true; window.t = 0.5;'
+                   ' setTimeout(() => { window.t = 2; window.selesai = true; }, 1200); });</script>')
+    video_palsu = ('<video width="200" height="100"></video>'
+                   '<div class="learning__RAMRButton learning__RAMRButton--play" style="width:50px;height:30px">p</div>')
+    page = browser.new_page()
+    page.set_content(media_palsu("2") + video_palsu + mulai_palsu)
+    check("video: putar_video menunggu media selesai (ended), bukan hanya mulai",
+          pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.selesai") is True)
+    page.close()
+    page = browser.new_page()
+    page.set_content(media_palsu("NaN", "true") + '<video width="200" height="100"></video>')
+    check("video: durasi tak terbaca (NaN) -> berhenti, tidak menunggu tanpa batas",
+          raises(lambda: pelajaran.putar_video(page, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+    page = browser.new_page()
+    page.set_content(media_palsu(str(pelajaran.MAX_DURASI_MEDIA + 1), "true") + '<video width="200" height="100"></video>')
+    check("video: durasi di atas batas atas -> berhenti",
+          raises(lambda: pelajaran.putar_video(page, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+    page = browser.new_page()
+    page.set_content(  # Reminder di iframe: teks body tak berubah saat muncul, seperti di situs asli
+        '<div id="isi">awal</div><a class="tasksBtnext" href="#">Next</a>' + media_palsu("2") + video_palsu +
+        '<iframe id="f" style="display:none" srcdoc=\'<h3>Reminder!</h3>'
+        '<p>You need to play the video/audio to achieve progress in this step.</p>'
+        '<a href="#" onclick="parent.fc()">Continue</a> <a href="#" onclick="parent.fs()">Stay in this step</a>\'></iframe>'
+        '<script>let ack = false; const f = document.getElementById("f");'
+        'window.fs = () => { ack = true; f.style.display = "none"; };'
+        'window.fc = () => { window.lewat = true; f.style.display = "none"; };'
+        'document.querySelector(".tasksBtnext").addEventListener("click", (ev) => { ev.preventDefault();'
+        ' if (!ack) f.style.display = "block"; else document.getElementById("isi").textContent = "akhir"; });</script>'
+        + mulai_palsu)
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    alasan = pelajaran.kerjakan_berurutan(page, ring, 2, 4000)
+    check("reminder media (iframe): Next tanpa perubahan teks tak dianggap 'habis'; tetap, putar, Next -> halaman berganti",
+          page.inner_text("#isi") == "akhir" and ring["halaman"] == 2 and alasan == "habis"
+          and page.evaluate("() => window.lewat") is None)
+    page.close()
+    page = browser.new_page()
+    page.set_content('<h3>Reminder!</h3><p>You need to do something else.</p><a href="#">Continue</a>')
+    check("reminder: teks tak dikenal -> berhenti, Continue tidak diklik",
+          pelajaran.reminder_terlihat(page) is True
+          and raises(lambda: pelajaran.selesaikan_reminder(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+
     # --- Diagnosa (baca saja) di halaman tiruan ---
     page = browser.new_page()
     page.goto(URL_ASLI)

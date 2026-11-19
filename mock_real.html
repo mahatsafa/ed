@@ -78,6 +78,7 @@ function pasangVideo(area) {
     '<div class="learning__RAMROverlayW"><div class="learning__RAMRButton learning__RAMRButton--play"></div></div></div>');
   const v = $("#MP");
   v.srcObject = kanvas.captureStream(10);
+  Object.defineProperty(v, "duration", { get: () => 1.5 });  // siaran langsung berdurasi tak hingga; situs asli berhingga (1:07)
   v.addEventListener("playing", () => { if (tugas[i] === "video") tandaiSelesai(); });
   $(".learning__RAMRButton--play").addEventListener("click", () => {
     v.play();

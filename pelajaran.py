@@ -66,6 +66,12 @@ ISIAN_TEKS = "a"  # jawaban salah tidak masalah (keputusan pemilik akun); yang p
 MAX_TEKS_BEBAS = 20  # batas textarea per halaman; lebih dari ini = bentuk halaman tak terduga, berhenti
 MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
+MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
+                 ".some(m => m.ended || (m.duration > 0 && m.currentTime >= m.duration - 0.5))")
+MEDIA_DURASI = ("() => { const m = [...document.querySelectorAll('video,audio')]"
+                ".find(m => !m.paused && m.currentTime > 0); return m ? m.duration : NaN; }")
+MAX_DURASI_MEDIA = 20 * 60  # detik; durasi tak terbaca atau lebih panjang dari ini = tak ditunggu, berhenti
+TAMBAHAN_TUNGGU_MEDIA = 30  # detik di atas durasi media
 TEKS_HALAMAN = "() => document.body.innerText.replace(/\\d/g, '')"  # angka dibuang (waktu video)
 
 
@@ -116,6 +122,13 @@ def putar_video(page, timeout=TIMEOUT_MS):
     else:
         return False
     periksa(page, "video_terputar", lambda: page.wait_for_function(MEDIA_JALAN, timeout=timeout))
+    durasi = page.evaluate(MEDIA_DURASI)  # situs menghitung progres hanya kalau media diputar sampai habis
+    if not isinstance(durasi, (int, float)) or not 0 < durasi <= MAX_DURASI_MEDIA:
+        screenshot_on_fail(page, "durasi_media_tak_wajar")
+        raise JenisSoalTidakDikenal(f"Durasi media tak terbaca atau di luar batas: {durasi!r}")
+    setup_logger().info("Menunggu media selesai (%.0f detik)", durasi)
+    periksa(page, "video_selesai", lambda: page.wait_for_function(
+        MEDIA_SELESAI, timeout=int((durasi + TAMBAHAN_TUNGGU_MEDIA) * 1000)))
     return True
 
 
@@ -345,13 +358,23 @@ def lanjut(page, timeout=TIMEOUT_MS):
 
 
 REMINDER = re.compile(r"You need to complete the activity (\d+)")
+REMINDER_MEDIA = re.compile(r"You need to play the video/audio")
+JUDUL_REMINDER = re.compile(r"^\s*Reminder!\s*$")
 SEL_PAGER = ".learning__tasksNav_tasksW .learning__tasksNav_task"  # nomor halaman di bawah
 MAX_PERCOBAAN_REMINDER = 5  # batas siklus "tetap di step" per jendela Reminder
 
 
+def cari_teks(page, pola, exact=False):
+    """Elemen pertama yang terlihat dengan teks `pola` di frame mana pun (jendela Reminder bisa di iframe)."""
+    for frame in page.frames:
+        teks = frame.get_by_text(pola, exact=exact)
+        if teks.count() > 0 and teks.first.is_visible():
+            return teks.first
+    return None
+
+
 def reminder_terlihat(page):
-    teks = page.get_by_text(REMINDER)
-    return teks.count() > 0 and teks.first.is_visible()
+    return any(cari_teks(page, p) for p in (REMINDER, REMINDER_MEDIA, JUDUL_REMINDER))
 
 
 def ke_halaman(page, nomor, timeout=TIMEOUT_MS):
@@ -371,14 +394,27 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
     for _ in range(MAX_PERCOBAAN_REMINDER):
         if not reminder_terlihat(page):
             return "lanjut"
-        cocok = REMINDER.search(page.get_by_text(REMINDER).first.inner_text())
-        nomor = int(cocok.group(1)) if cocok else None
+        if cari_teks(page, REMINDER_MEDIA):  # video/audio belum diputar sampai habis: tetap, putar, Next lagi
+            log.info("Reminder: video/audio belum diputar; tetap di step dan memutarnya.")
+            click(page, cari_teks(page, "Stay in this step", exact=True), "reminder_tetap_di_step", timeout)
+            try:
+                putar_video(page, timeout)
+            except JenisSoalTidakDikenal as err:
+                log.warning("Media tak bisa diputar bot (%s); step akan dilewati.", err)
+                break
+            lanjut(page, timeout)
+            continue
+        ada = cari_teks(page, REMINDER)
+        if ada is None:  # jendela Reminder bertulisan lain: jangan menebak dan jangan klik Continue
+            screenshot_on_fail(page, "reminder_tak_dikenal")
+            raise JenisSoalTidakDikenal("Jendela Reminder dengan teks yang tak dikenal bot.")
+        nomor = int(REMINDER.search(ada.inner_text()).group(1))
         jumlah = page.locator(SEL_PAGER).count()
-        if nomor is None or nomor in dicoba or not 1 <= nomor <= jumlah:
+        if nomor in dicoba or not 1 <= nomor <= jumlah:
             break
         dicoba.add(nomor)
         log.info("Reminder: aktivitas %d belum selesai; tetap di step dan mengerjakannya.", nomor)
-        click(page, page.get_by_text("Stay in this step", exact=True).first, "reminder_tetap_di_step", timeout)
+        click(page, cari_teks(page, "Stay in this step", exact=True), "reminder_tetap_di_step", timeout)
         ke_halaman(page, nomor, timeout)
         try:
             kerjakan_halaman(page, ringkasan, timeout)
@@ -389,7 +425,7 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
     if reminder_terlihat(page):
         log.warning("Reminder tak terselesaikan; klik Continue (step dilewati).")
         screenshot_on_fail(page, "reminder_dilewati")
-        click(page, page.get_by_text("Continue", exact=True).first, "reminder_continue", timeout)
+        click(page, cari_teks(page, "Continue", exact=True), "reminder_continue", timeout)
         tunggu_stabil(page)
         return "lewat"
     return "lanjut"
@@ -422,11 +458,14 @@ def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
                 ringkasan["manual"] = ringkasan.get("manual", 0) + 1
                 log.warning("Bot tak tahu cara halaman ini (%s); menunggu pengguna mengerjakannya.", err)
                 tanya(page, str(err))
-        if not lanjut(page, timeout):
+        berganti = lanjut(page, timeout)
+        if reminder_terlihat(page):  # Reminder membuat Next tampak "tak berubah"; periksa sebelum menyimpulkan habis
+            if selesaikan_reminder(page, ringkasan, timeout) == "lewat":
+                return "lewat"
+            continue
+        if not berganti:
             log.info("Next tidak mengubah halaman.")
             return "habis"
-        if reminder_terlihat(page) and selesaikan_reminder(page, ringkasan, timeout) == "lewat":
-            return "lewat"
     log.warning("Batas %d halaman tercapai, berhenti.", maks)
     return "batas"
 
