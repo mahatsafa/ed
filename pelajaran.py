@@ -142,12 +142,22 @@ def pilih_radio(page, timeout=TIMEOUT_MS):
         screenshot_on_fail(page, "radio_di_luar_set")  # radio yang tak bisa dikelompokkan: jangan menebak
         raise JenisSoalTidakDikenal("Ada radio di luar .prMCQ__qaSet; pengelompokan pertanyaan tak jelas.")
     for n in range(himpunan.count()):  # batas atas = jumlah pertanyaan
-        pertama = himpunan.nth(n).locator(SEL["radio"]).first
-        id_ = pertama.get_attribute("id", timeout=timeout)
-        if not id_:
-            screenshot_on_fail(page, f"radio_tanpa_id_{n + 1}")
-            raise JenisSoalTidakDikenal(f"Radio pertanyaan {n + 1} tanpa id; label tak bisa dicari.")
-        click(page, himpunan.nth(n).locator(f'label[for="{id_}"]'), f"pertanyaan_{n + 1}_pilihan_1", timeout)
+        semua = himpunan.nth(n).locator(SEL["radio"])
+        pertama = label = None
+        for k in range(semua.count()):  # batas atas = jumlah radio di pertanyaan ini
+            radio = semua.nth(k)
+            id_ = radio.get_attribute("id", timeout=timeout)
+            if not id_:
+                screenshot_on_fail(page, f"radio_tanpa_id_{n + 1}")
+                raise JenisSoalTidakDikenal(f"Radio pertanyaan {n + 1} tanpa id; label tak bisa dicari.")
+            kandidat = himpunan.nth(n).locator(f'label[for="{id_}"]')
+            if kandidat.count() and kandidat.first.is_visible():  # situs menyimpan opsi "None" tersembunyi di urutan pertama
+                pertama, label = radio, kandidat
+                break
+        if pertama is None:
+            screenshot_on_fail(page, f"radio_tak_terlihat_{n + 1}")
+            raise JenisSoalTidakDikenal(f"Pertanyaan {n + 1} tak punya opsi yang terlihat.")
+        click(page, label, f"pertanyaan_{n + 1}_pilihan_1", timeout)
         periksa(page, f"pertanyaan_{n + 1}_terjawab", lambda r=pertama: expect(r).to_be_checked(timeout=timeout))
     return True
 

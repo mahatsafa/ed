@@ -207,6 +207,23 @@ with sync_playwright() as pw:
           and page.evaluate("() => window.seeAnswerKlik") == 0)
     page.close()
 
+    def opsi(n, tersembunyi=False):
+        return (f'<div class="prMCQ__answers{" hide" if tersembunyi else ""}"><input type="radio" class="layout__radio" '
+                f'id="question-1_answer-{n}"><label for="question-1_answer-{n}">opsi {n}</label></div>')
+    page = browser.new_page()  # situs asli: opsi "None" tersembunyi (.hide) berada di urutan DOM pertama
+    page.set_content('<style>.hide { display: none; }</style><div class="prMCQ__qaSet">'
+                     + opsi(5, True) + opsi(4) + opsi(1) + '</div>')
+    check("pilihan: opsi tersembunyi di urutan pertama dilewati; opsi terlihat pertama (answer-4) yang dipilih",
+          pelajaran.pilih_radio(page, 3000) is True
+          and page.evaluate("() => [...document.querySelectorAll('input:checked')].map(i => i.id)") == ["question-1_answer-4"])
+    page.close()
+    page = browser.new_page()
+    page.set_content('<style>.hide { display: none; }</style><div class="prMCQ__qaSet">' + opsi(5, True) + '</div>')
+    check("pilihan: tak ada opsi terlihat -> berhenti, tidak ada yang diklik",
+          raises(lambda: pelajaran.pilih_radio(page, 2000), pelajaran.JenisSoalTidakDikenal)
+          and page.locator("input:checked").count() == 0)
+    page.close()
+
     page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=radioluar")
     page.wait_for_selector("input.layout__radio")
