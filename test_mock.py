@@ -448,6 +448,8 @@ with sync_playwright() as pw:
     check("bacaan: tanpa Next -> bukan bacaan", bacaan_ok(bacaan) is False)
     check("bacaan: ada Check Answer terlihat -> bukan bacaan",
           bacaan_ok(bacaan + nav + '<li id="CheckAnswer">Check</li>') is False)
+    check("bacaan: tombol menu header (sitemenu__) tidak dihitung kontrol soal (situs asli Lesson 2) -> bacaan",
+          bacaan_ok(bacaan + nav + '<button id="sitemenu__openMenuBtn">menu</button>') is True)
     check("bacaan: ada isian teks terlihat -> bukan bacaan", bacaan_ok(bacaan + nav + '<input type="text">') is False)
     check("bacaan: ada tombol/seret terlihat -> bukan bacaan",
           bacaan_ok(bacaan + nav + '<button>Ok</button>') is False

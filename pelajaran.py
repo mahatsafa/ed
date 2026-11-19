@@ -314,7 +314,7 @@ JS_HALAMAN_BACAAN = """(sel) => {
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
   const q = (x) => [...document.querySelectorAll(x)].filter(vis);
   const kontrol = q('input, select, textarea, [contenteditable], .dndZone, .dnditem, button')
-    .filter((e) => !e.closest('#DictionaryPanelContainer'));
+    .filter((e) => !e.closest('#DictionaryPanelContainer, [id^="sitemenu__"]'));  // sitemenu: tombol menu header situs asli
   return q(sel.cek).length === 0 && q(sel.next).length > 0 && kontrol.length === 0;
 }"""
 
