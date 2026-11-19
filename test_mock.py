@@ -289,6 +289,22 @@ with sync_playwright() as pw:
     page.close()
 
     page = browser.new_page()
+    page.goto(URL_KURSUS + "?skenario=balik")
+    ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
+    check("kursus: kartu unit berbalik ke daftar lesson -> lesson tak terkunci diklik, 7 tugas selesai, Test tak diklik",
+          page.evaluate("() => selesaiJumlah()") == 7 and page.evaluate("() => testDikerjakan") == 0
+          and page.evaluate("() => lessonKunciKlik") == 0 and ring["tak_terverifikasi"] == 0)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_KURSUS + "?skenario=balikkunci")
+    ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
+    check("kursus: kartu berbalik, semua lesson terkunci -> unit dilewati, 0 tugas, lesson terkunci tak diklik",
+          ring["halaman"] == 0 and page.evaluate("() => selesaiJumlah()") == 0
+          and page.evaluate("() => lessonKunciKlik") == 0 and page.locator("#home").is_visible())
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_KURSUS + "?skenario=semua")
     ring = pelajaran.jalankan_pelajaran(page, timeout=4000)
     check("kursus: semua unit Completed! -> berhenti tanpa mengerjakan apa pun",
@@ -302,6 +318,18 @@ with sync_playwright() as pw:
           and page.evaluate("() => selesaiJumlah()") == 0)
     check("kursus: pembacaan daftar gagal -> HTML daftar tersimpan di logs/",
           any(f.stat().st_size > 0 for f in LOG_DIR.glob("*_daftar_*.html")))
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_KURSUS + "?mulai=area")
+    page.wait_for_selector("#learning__dropDownListW_steps .learning__dropDownList_item", state="attached")
+    page.click("#learning__dropDownListTitleW_steps")
+    terhalang = raises(lambda: page.click("#learning__dropDownListTitleW_steps", timeout=500), Exception)
+    pelajaran.tutup_daftar(page, "steps", timeout=4000)
+    check("kursus: overlay menghalangi judul daftar yang terbuka; tutup_daftar menutupnya lewat overlay",
+          terhalang and not pelajaran.daftar_terbuka(page, "steps")
+          and not page.locator(".utils__siteOverlay--LABody").is_visible()
+          and page.evaluate("() => overlayBawahKlik") == 0)
     page.close()
 
     page = browser.new_page()

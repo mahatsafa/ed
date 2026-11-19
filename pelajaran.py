@@ -38,6 +38,8 @@ SEL = {
     "next": "a.tasksBtnext",
     "selesai": ".learning__tasksNav_task--done",
     "kartu_unit": ".home__unitIW",  # kartu unit di dashboard; teks "Completed!" kalau unit selesai
+    "daftar_lesson_kartu": ".home__courseList",  # daftar lesson di kartu yang berbalik
+    "lesson_kartu": "a.home__courseListItemLink:not(.home__courseListItemLink--locked)",
     "rumah": "#sitemenu__itemHome",  # ikon rumah di header area belajar
     "intro": ".learning__tasksNav_pager_intro.learning__tasksNav_task--current",  # layar intro step
     "item_daftar": ".learning__dropDownList_item",
@@ -407,9 +409,38 @@ def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
         periksa(page, f"{jenis}_{indeks + 1}_aktif", lambda: expect(item).to_have_class(
             re.compile(r"--current"), timeout=timeout))
     tunggu_stabil(page)  # beri waktu daftar menutup sendiri sebelum dicek
-    if daftar_terbuka(page, jenis):  # masih terbuka: tutup supaya tidak menutupi soal
+    if daftar_terbuka(page, jenis):  # masih terbuka (mis. item sudah aktif): tutup supaya tidak menutupi soal
+        tutup_daftar(page, jenis, timeout)
+
+
+OVERLAY_DAFTAR = ".utils__siteOverlay--LABody"  # situs asli: menutupi badan halaman selama daftar terbuka
+JS_TITIK_OVERLAY = """(sel) => {
+  const o = document.querySelector(sel); if (!o) return null;
+  const r = o.getBoundingClientRect();
+  for (const fy of [0.5, 0.6, 0.7, 0.4, 0.8, 0.3]) for (const fx of [0.02, 0.5, 0.98]) {
+    const x = r.left + r.width * fx, y = r.top + r.height * fy;
+    if (document.elementFromPoint(x, y) === o) return {x: x - r.left, y: y - r.top};
+  }
+  return null;
+}"""  # titik di overlay badan yang tidak tertimpa daftar atau overlay lain (LABottomNav menumpuk tepi bawah)
+
+
+def tutup_daftar(page, jenis, timeout=TIMEOUT_MS):
+    """Tutup daftar lesson/step. Situs asli memasang overlay di atas halaman selama daftar terbuka, jadi
+    judul daftar tak bisa diklik; klik titik overlay yang tidak tertimpa apa pun (terbukti menutup
+    daftar di situs asli 2026-11-19). Tanpa overlay: klik judul. Tak ada titik bebas / masih terbuka = berhenti."""
+    overlay = page.locator(OVERLAY_DAFTAR).first
+    if overlay.count() and overlay.is_visible():
+        titik = page.evaluate(JS_TITIK_OVERLAY, OVERLAY_DAFTAR)
+        if titik is None:
+            screenshot_on_fail(page, f"overlay_{jenis}_tertimpa")
+            raise JenisSoalTidakDikenal("Overlay daftar tertimpa elemen lain; tidak ada titik aman untuk diklik.")
+        click(page, overlay, f"tutup_daftar_{jenis}", timeout, position=titik)
+    else:
         click(page, page.locator(f"#learning__dropDownListTitleW_{jenis}"), f"tutup_daftar_{jenis}", timeout)
-        tunggu_stabil(page)
+    periksa(page, f"daftar_{jenis}_tertutup", lambda: page.wait_for_function(
+        f"(j) => !({JS_DAFTAR_TERBUKA})(j)", arg=jenis, timeout=timeout))
+    tunggu_stabil(page)
 
 
 KUNCI_LESSON = "#learning__dropDownListTitleW_lessons.learning__dropDownListTitleW--disabled"
@@ -475,6 +506,9 @@ def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS):
     return target
 
 
+SEL_AREA = "#learning__dropDownListTitleW_lessons"  # tanda area belajar sudah tampil
+
+
 def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
     """Dari dashboard: klik unit pertama yang belum "Completed!" dan belum dicoba. Kembalikan nama
     unit (teks kartu), atau None kalau tak ada."""
@@ -487,8 +521,18 @@ def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
         nama = kartu.nth(n).inner_text().replace("\n", " ")[:50]
         setup_logger().info("Buka unit ke-%d: %s", n + 1, nama)
         click(page, kartu.nth(n), f"kartu_unit_{n + 1}", timeout)
-        wait_visible(page, page.locator("#learning__dropDownListTitleW_lessons"), "area_belajar",
-                 max(timeout, TUNGGU_AREA_MS))
+        area = page.locator(SEL_AREA)
+        salah_satu = page.locator(f"{SEL_AREA}:visible").or_(kartu.nth(n).locator(f"{SEL['daftar_lesson_kartu']}:visible"))
+        wait_visible(page, salah_satu.first, "area_atau_daftar_lesson_kartu", max(timeout, TUNGGU_AREA_MS))
+        if not area.is_visible():  # situs asli: kartu unit yang bukan unit aktif berbalik menampilkan daftar lesson
+            lesson = kartu.nth(n).locator(SEL["lesson_kartu"])
+            if lesson.count() == 0:  # semua lesson terkunci: gagal tertutup, unit dilewati
+                setup_logger().warning("Unit ke-%d: semua lesson terkunci, dilewati.", n + 1)
+                screenshot_on_fail(page, f"unit_{n + 1}_terkunci")
+                continue
+            # lesson pertama hanya pintu masuk area belajar; lesson target dipilih lewat dropdown
+            click(page, lesson.first, f"lesson_pertama_unit_{n + 1}", timeout)
+        wait_visible(page, area, "area_belajar", max(timeout, TUNGGU_AREA_MS))
         tunggu_stabil(page)
         return nama
     return None

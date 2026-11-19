@@ -11,6 +11,10 @@
   .learning__tasksNav_task--done { background: #2a6; }
   li, .learning__dropDownList_item, .learning__dropDownListTitleW, .home__unitIW { cursor: pointer; }
   .learning__dropDownListW { border: 1px solid #333; padding: 4px; }
+  /* situs asli: selama daftar terbuka, overlay menutupi layar (judul daftar tak bisa diklik), daftar di atasnya */
+  .utils__siteOverlay { position: fixed; inset: 0; z-index: 10; }
+  .utils__siteOverlay--LABottomNav { top: auto; height: 46px; z-index: 11; }  /* menumpuk tepi bawah LABody */
+  .learning__dropDownListW:not(.hidden) { position: relative; z-index: 20; background: #fff; }
 </style>
 </head>
 <body>
@@ -43,6 +47,8 @@
   <div id="nav"></div>
 </section>
 
+<div class="utils__siteOverlay utils__siteOverlay--LABody hidden"></div>
+<div class="utils__siteOverlay utils__siteOverlay--LABottomNav hidden"></div>
 <script>
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -86,8 +92,21 @@ function gambarHome() {
     `<div class="home__unitIW" id="home__unitIW_0"><div class="home__statusW">Completed!</div><div class="home__details">1\nBuying</div></div>` +
     `<div class="home__unitIW" id="home__unitIW_1"><div class="home__statusW">${semua || unitSelesai() ? "Completed!" : ""}</div><div class="home__details">2\nSports</div></div>`;
   document.querySelectorAll(".home__unitIW").forEach((k, n) => k.addEventListener("click", () => {
-    if (n === 1) tampil("belajar");
+    if (n !== 1) return;
+    // skenario balik/balikkunci: seperti situs asli, kartu unit bukan-aktif berbalik menampilkan daftar lesson
+    if (skenario !== "balik" && skenario !== "balikkunci") { tampil("belajar"); return; }
+    if (k.querySelector(".home__courseList")) return;
+    const kunci = skenario === "balikkunci" ? " home__courseListItemLink--locked" : "";
+    k.insertAdjacentHTML("beforeend", `<div class="home__courseList">` +
+      `<a class="home__courseListItemLink home__courseListItemLink--locked">0. Terkunci</a>` +
+      `<a class="home__courseListItemLink${kunci}">1. Buka</a></div>`);
+    k.querySelectorAll(".home__courseListItemLink").forEach((a) => a.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (a.classList.contains("home__courseListItemLink--locked")) window.lessonKunciKlik += 1;
+      else tampil("belajar");
+    }));
   }));
+  window.lessonKunciKlik = 0;
 }
 function tampil(layar) {
   $("#home").classList.toggle("hidden", layar !== "home");
@@ -110,6 +129,7 @@ function daftar(jenis) {
   kotak.querySelectorAll(".learning__dropDownList_item").forEach((el, n) => el.addEventListener("click", () => {
     p = halaman.findIndex((h) => h.t === -1 && (jenis === "lessons" ? (h.l === n && h.s === 0) : (h.l === cur.l && h.s === n)));
     $(`#learning__dropDownListW_${jenis}`).classList.add("hidden");
+    aturOverlay();
     $("#area").innerHTML = "";
     setTimeout(gambar, 300);
   }));
@@ -117,7 +137,18 @@ function daftar(jenis) {
 ["lessons", "steps"].forEach((jenis) => $(`#learning__dropDownListTitleW_${jenis}`).addEventListener("click", (e) => {
   if (e.currentTarget.classList.contains("learning__dropDownListTitleW--disabled")) return;
   $(`#learning__dropDownListW_${jenis}`).classList.toggle("hidden");
+  aturOverlay();
 }));
+function aturOverlay() {
+  const buka = [...document.querySelectorAll(".learning__dropDownListW")].some((w) => !w.classList.contains("hidden"));
+  document.querySelectorAll(".utils__siteOverlay").forEach((o) => o.classList.toggle("hidden", !buka));
+}
+window.overlayBawahKlik = 0;
+$(".utils__siteOverlay--LABottomNav").addEventListener("click", () => { window.overlayBawahKlik += 1; });
+$(".utils__siteOverlay--LABody").addEventListener("click", () => {
+  document.querySelectorAll(".learning__dropDownListW").forEach((w) => w.classList.add("hidden"));
+  aturOverlay();
+});
 
 function gambarNav() {
   const cur = halaman[p], n = lessons[cur.l].steps[cur.s].tugas;

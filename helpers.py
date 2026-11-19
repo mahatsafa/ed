@@ -58,12 +58,12 @@ def wait_visible(page, locator, name, timeout=TIMEOUT_MS):
     return locator
 
 
-def click(page, locator, name, timeout=TIMEOUT_MS):
-    """Klik elemen. Playwright otomatis menunggu elemen siap diklik."""
+def click(page, locator, name, timeout=TIMEOUT_MS, **opsi):
+    """Klik elemen. Playwright otomatis menunggu elemen siap diklik. `opsi` diteruskan (mis. position)."""
     log = setup_logger()
     log.info("Klik: %s", name)
     try:
-        locator.click(timeout=timeout)
+        locator.click(timeout=timeout, **opsi)
     except Exception:
         log.error("Gagal klik: %s", name)
         screenshot_on_fail(page, f"klik_{name}")
