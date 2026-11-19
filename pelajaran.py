@@ -83,15 +83,17 @@ MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
                  ".some(m => m.ended || (m.duration > 0 && m.currentTime >= m.duration - 0.5))")
-JS_PASANG_AKHIR = """() => { window.__botSelesai = false;
+JS_PASANG_AKHIR = """() => { const token = window.__botToken = {}; window.__botSelesai = false;
+  const hidup = () => window.__botToken === token;  // elemen audio dipakai ulang antar halaman: pendengar lama harus mati
   document.querySelectorAll('video,audio').forEach((m) => {
     let maks = 0, dur = m.duration > 0 ? m.duration : 0;  // dur disimpan: saat 'emptied' m.duration sudah NaN
-    m.addEventListener('ended', () => { window.__botSelesai = true; });
+    m.addEventListener('ended', () => { if (hidup()) window.__botSelesai = true; });
     m.addEventListener('timeupdate', () => {
+      if (!hidup()) return;
       if (m.duration > 0) dur = m.duration;
       maks = Math.max(maks, m.currentTime);
       if (dur > 0 && maks >= dur - Math.max(1.5, dur * 0.05)) window.__botSelesai = true; });
-    m.addEventListener('emptied', () => { if (dur > 0 && maks >= dur * 0.8) window.__botSelesai = true; });
+    m.addEventListener('emptied', () => { if (hidup() && dur > 0 && maks >= dur * 0.8) window.__botSelesai = true; });
   }); }"""  # audio situs asli (diamati 13:4x): tanpa 'ended'; dipotong ±0,8 dtk sebelum akhir lalu sumber dimuat ulang (currentTime kembali 0)
 MEDIA_DURASI = ("() => { const m = [...document.querySelectorAll('video,audio')]"
                 ".find(m => !m.paused && m.currentTime > 0); return m ? m.duration : NaN; }")
@@ -147,7 +149,9 @@ def putar_video(page, timeout=TIMEOUT_MS):
             overlay.first.wait_for(state="visible", timeout=min(timeout, 3000))
         except PWTimeout:
             pass
-    if overlay.count() and overlay.first.is_visible() and di_layar(overlay.first):
+    if page.evaluate(MEDIA_JALAN):  # sudah berjalan: klik tombol putar akan MENJEDA (situs asli 14:17)
+        setup_logger().info("Media sudah berjalan; tombol putar tidak diklik.")
+    elif overlay.count() and overlay.first.is_visible() and di_layar(overlay.first):
         click(page, overlay.first, "video_tombol_putar", timeout)
     elif kustom.count() and kustom.is_visible() and di_layar(kustom):
         click(page, kustom, "video_tombol_putar", timeout)

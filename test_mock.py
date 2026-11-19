@@ -636,6 +636,32 @@ with sync_playwright() as pw:
     check("video: audio dipotong 0,8 dtk sebelum akhir tanpa 'ended' (situs asli) tetap terdeteksi selesai",
           pelajaran.putar_video(page, 4000) is True)
     page.close()
+    page = browser.new_page()  # elemen audio yang SAMA dipakai ulang di halaman berikutnya (situs asli 14:17)
+    page.set_content(media_palsu("18.44") + video_palsu + (
+        '<script>window.fase = 0; document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
+        ' if (window.main) return; window.main = true; window.t = 0.5; window.fase++; const v = document.querySelector("video");'
+        ' if (window.fase === 1) {'
+        '  setTimeout(() => { window.t = 17.66; v.dispatchEvent(new Event("timeupdate")); }, 300);'
+        '  setTimeout(() => { window.t = 0; window.main = false; window.dur = NaN; v.dispatchEvent(new Event("emptied")); window.dur = 18.44; }, 500);'
+        ' } else {'
+        '  setTimeout(() => { window.t = 0.7; v.dispatchEvent(new Event("timeupdate")); }, 300);'
+        '  setTimeout(() => { window.t = 17.66; v.dispatchEvent(new Event("timeupdate")); }, 1000);'
+        '  setTimeout(() => { window.t = 0; window.main = false; }, 1200); } });</script>'))
+    pelajaran.putar_video(page, 4000)
+    page.wait_for_function("() => !window.main", timeout=4000)
+    mulai = time.time()
+    pelajaran.putar_video(page, 4000)
+    lama = time.time() - mulai
+    check("video: pendengar dari halaman sebelumnya tidak menandai selesai di halaman baru (tunggu >= 0,8 dtk, bukan seketika)",
+          lama >= 0.8)
+    page.close()
+    page = browser.new_page()  # media sudah berjalan (sisa halaman sebelumnya): jangan klik tombol putar (akan menjeda)
+    page.set_content(media_palsu("2", "true") + video_palsu + (
+        '<script>window.klik = 0; document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => { window.klik++; });'
+        'setTimeout(() => { window.t = 2; window.selesai = true; }, 500);</script>'))
+    check("video: media sudah berjalan -> tombol putar tidak diklik, tetap ditunggu sampai selesai",
+          pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.klik") == 0)
+    page.close()
     page = browser.new_page()
     asli_tambahan = pelajaran.TAMBAHAN_TUNGGU_MEDIA
     pelajaran.TAMBAHAN_TUNGGU_MEDIA = 1
