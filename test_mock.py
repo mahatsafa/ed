@@ -169,6 +169,48 @@ with sync_playwright() as pw:
     page.close()
 
     page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=klasifikasi")
+    ring, alasan = berurutan(page)
+    check("pelajaran: klasifikasi (prCl): 5 item dibagi ke 2 kolom (3+2), bank kosong, terverifikasi, See Answer nol",
+          ring == {"halaman": 1, "tak_terverifikasi": 0} and alasan == "habis"
+          and page.locator(".prCl__container--bank .dnditem").count() == 0
+          and page.evaluate("() => [...document.querySelectorAll('.prCl__container--normal .dndZone')]"
+                            ".map(z => z.querySelectorAll('.dnditem').length)") == [3, 2]
+          and page.locator(".learning__tasksNav_task--done").count() == 1
+          and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=gambar")
+    ring, alasan = berurutan(page)
+    check("pelajaran: kata ke gambar (prTextToPic): 3 gambar masing-masing satu kata, terverifikasi",
+          ring == {"halaman": 1, "tak_terverifikasi": 0} and alasan == "habis"
+          and page.evaluate("() => [...document.querySelectorAll('.prTextToPic__container--reg .dndZone')]"
+                            ".map(z => z.querySelectorAll('.dnditem').length)") == [1, 1, 1]
+          and page.locator(".learning__tasksNav_task--done").count() == 1)
+    page.close()
+
+    page = browser.new_page()
+    page.goto(URL_ASLI + "?skenario=dndasing")
+    check("pelajaran: zona seret tanpa handler -> berhenti (tidak diam-diam dilewati), tak ada item bergeser",
+          raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)
+          and page.locator("#x_0 .dnditem").count() == 0 and page.locator(".learning__tasksNav_task--done").count() == 0)
+    page.close()
+
+    page = browser.new_page()  # kartu Reminder di iframe memuat belakangan: selesaikan_reminder tidak boleh menyimpulkan "hilang"
+    page.set_content(
+        '<div id="isi">awal</div><a class="tasksBtnext" href="#">Next</a>'
+        '<div id="EdoFrameBox" style="position:fixed;inset:0;background:#0006;z-index:9"></div>'
+        '<script>setTimeout(() => { document.getElementById("EdoFrameBox").innerHTML = "<div>Reminder! You need to complete the '
+        'activities 9 and 8 to achieve progress in this step. <a id=\\"c\\" href=\\"#\\">Continue</a></div>"; '
+        'document.getElementById("c").addEventListener("click", (e) => { e.preventDefault(); window.lewat = true; '
+        'document.getElementById("EdoFrameBox").remove(); }); }, 800);</script>')
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    check("reminder: kartu terlambat dimuat -> ditunggu; nomor di luar pager -> Continue (lewat), bukan 'lanjut' dini",
+          pelajaran.selesaikan_reminder(page, ring, 3000) == "lewat" and page.evaluate("() => window.lewat === true"))
+    page.close()
+
+    page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=mikrofon")
     check("pelajaran: soal suara (webRtc) -> berhenti, 0 opsi diklik, tidak selesai",
           raises(lambda: berurutan(page), pelajaran.JenisSoalTidakDikenal)

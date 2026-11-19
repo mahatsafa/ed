@@ -31,6 +31,10 @@ SEL = {
     "kata_terisi": ".dnditem",
     "cocok_kotak": ".prMT_T2T__regContainer .dndZone",  # kotak jawaban tiap baris pencocokan
     "cocok_kata": ".prMT_T2T__wordsBankWrapper .dnditem",  # kata di bank pencocokan
+    "klas_zona": ".prCl__container--normal .dndZone",  # soal klasifikasi (tabel True/False, kolom orang): satu kolom banyak item
+    "klas_kata": ".prCl__container--bank .dnditem",
+    "gambar_kotak": ".prTextToPic__container--reg .dndZone",  # pasangkan kata ke gambar: satu kata per gambar
+    "gambar_kata": ".prTextToPic__wordsBankWrapper .dnditem",
     "webrtc": ".answersWrapper.webRtc",  # soal dengan pengenalan suara (butuh mikrofon)
     "start": ".speakingInteractButtonWrapper a.continue",
     "start_nonaktif": ".speakingInteractButtonWrapper .continueWrapper.disable",
@@ -74,6 +78,7 @@ TULISAN = {
 }
 TEKS_TULISAN = "The waiter says that the two women ordered food and drinks at the restaurant."  # tak dinilai (keputusan pemilik akun)
 MIN_KATA_TULISAN = 5
+MAX_KLASIFIKASI = 30  # batas item klasifikasi yang ditempatkan per halaman
 MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
@@ -262,10 +267,37 @@ def isi_seret(page, sel_kotak, sel_kata, nama, timeout=TIMEOUT_MS):
     return True
 
 
+def isi_klasifikasi(page, timeout=TIMEOUT_MS):
+    """Soal klasifikasi (prCl): bagikan item di bank ke kolom secara bergiliran (jawaban salah tidak masalah,
+    yang perlu: semua item ditempatkan dan soal dicek). Batas atas MAX_KLASIFIKASI item; bank tak habis = berhenti."""
+    zona = page.locator(SEL["klas_zona"])
+    n_zona = zona.count()
+    if not n_zona:
+        return False
+    for k in range(MAX_KLASIFIKASI):
+        bank = page.locator(SEL["klas_kata"])
+        sisa = bank.count()
+        if not sisa:
+            return True
+        seret(page, bank.first, zona.nth(k % n_zona), f"klasifikasi_item_{k + 1}_ke_kolom_{k % n_zona + 1}", timeout)
+        periksa(page, f"klasifikasi_item_{k + 1}_ditempatkan", lambda s=sisa: expect(
+            page.locator(SEL["klas_kata"])).to_have_count(s - 1, timeout=timeout))
+    screenshot_on_fail(page, "klasifikasi_bank_tak_habis")
+    raise JenisSoalTidakDikenal(f"Bank klasifikasi masih berisi item setelah {MAX_KLASIFIKASI} percobaan.")
+
+
+JS_DND_ASING = """(sel) => [...document.querySelectorAll('.dndZone')].filter((z) => z.getBoundingClientRect().width > 0)
+  .filter((z) => !z.closest('.bankContainer, .dndBank, [class*="ordsBank"]'))
+  .filter((z) => !sel.some((s) => z.matches(s))).length"""  # zona seret di luar bank yang tak dicakup handler mana pun
+
+
 def elemen_belum_didukung(page):
-    """Nama elemen soal tanpa handler (suara, isian teks) kalau ada di halaman; kalau tidak, None."""
+    """Nama elemen soal tanpa handler (suara, isian teks, zona seret asing) kalau ada di halaman; kalau tidak, None."""
     if page.locator(SEL["webrtc"]).count():
         return "suara (webRtc)"
+    asing = page.evaluate(JS_DND_ASING, [SEL["cloze_kotak"], SEL["cocok_kotak"], SEL["klas_zona"], SEL["gambar_kotak"]])
+    if asing:
+        return f"zona seret tanpa handler ({asing})"
     if page.evaluate(JS_ISIAN_TEKS):
         return "isian teks"
     return None
@@ -390,6 +422,12 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     if isi_seret(page, SEL["cocok_kotak"], SEL["cocok_kata"], "pencocokan", timeout):
         dikerjakan.append("pencocokan")
         perlu_cek = True
+    if isi_seret(page, SEL["gambar_kotak"], SEL["gambar_kata"], "gambar", timeout):
+        dikerjakan.append("kata ke gambar")
+        perlu_cek = True
+    if isi_klasifikasi(page, timeout):
+        dikerjakan.append("klasifikasi")
+        perlu_cek = True
     if klik_start(page, timeout):
         dikerjakan.append("start")
     if not dikerjakan and halaman_bacaan(page):
@@ -484,7 +522,7 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
     log = setup_logger()
     dicoba = set()
     for _ in range(MAX_PERCOBAAN_REMINDER):
-        if not reminder_terlihat(page):
+        if not tunggu_reminder(page):  # kartu Reminder (iframe MsgPage.html) memuat belakangan; jangan simpulkan "hilang" terlalu cepat
             return "lanjut"
         if cari_teks(page, REMINDER_MEDIA):  # video/audio belum diputar sampai habis: tetap, putar, Next lagi
             log.info("Reminder: video/audio belum diputar; tetap di step dan memutarnya.")
