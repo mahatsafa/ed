@@ -625,6 +625,25 @@ with sync_playwright() as pw:
     check("video: pemutar yang kembali ke 0 saat selesai tetap terdeteksi lewat event 'ended'",
           pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.t") == 0)
     page.close()
+    def audio_terpotong(t_akhir, jeda_ms=600):  # situs asli: tanpa 'ended'; dipotong sebelum akhir, sumber dimuat ulang
+        return ('<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
+                ' if (window.main) return; window.main = true; window.t = 0.5; const v = document.querySelector("video");'
+                ' setTimeout(() => { window.t = ' + str(t_akhir) + '; v.dispatchEvent(new Event("timeupdate")); }, 300);'
+                ' setTimeout(() => { window.t = 0; window.main = false; window.dur = NaN; v.dispatchEvent(new Event("emptied")); }, '
+                + str(300 + jeda_ms) + '); });</script>')
+    page = browser.new_page()
+    page.set_content(media_palsu("18.44") + video_palsu + audio_terpotong(17.66))
+    check("video: audio dipotong 0,8 dtk sebelum akhir tanpa 'ended' (situs asli) tetap terdeteksi selesai",
+          pelajaran.putar_video(page, 4000) is True)
+    page.close()
+    page = browser.new_page()
+    asli_tambahan = pelajaran.TAMBAHAN_TUNGGU_MEDIA
+    pelajaran.TAMBAHAN_TUNGGU_MEDIA = 1
+    page.set_content(media_palsu("10") + video_palsu + audio_terpotong(2.0))  # berhenti di 20%: bukan selesai
+    check("video: berhenti jauh sebelum akhir lalu dimuat ulang -> TIDAK dianggap selesai (timeout, gagal tertutup)",
+          raises(lambda: pelajaran.putar_video(page, 4000), Exception))
+    pelajaran.TAMBAHAN_TUNGGU_MEDIA = asli_tambahan
+    page.close()
     page = browser.new_page()
     page.set_content(media_palsu("NaN", "true") + '<video width="200" height="100"></video>')
     check("video: durasi tak terbaca (NaN) -> berhenti, tidak menunggu tanpa batas",

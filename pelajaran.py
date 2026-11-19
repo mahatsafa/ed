@@ -85,9 +85,14 @@ MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
                  ".some(m => m.ended || (m.duration > 0 && m.currentTime >= m.duration - 0.5))")
 JS_PASANG_AKHIR = """() => { window.__botSelesai = false;
   document.querySelectorAll('video,audio').forEach((m) => {
-    m.addEventListener('ended', () => { window.__botSelesai = true; });  // pemutar audio situs asli mengembalikan dirinya ke 0 saat selesai
-    m.addEventListener('timeupdate', () => { if (m.duration > 0 && m.currentTime >= m.duration - 0.5) window.__botSelesai = true; });
-  }); }"""  # state elemen saja tak cukup: keadaan "selesai" bisa hanya sekejap
+    let maks = 0, dur = m.duration > 0 ? m.duration : 0;  // dur disimpan: saat 'emptied' m.duration sudah NaN
+    m.addEventListener('ended', () => { window.__botSelesai = true; });
+    m.addEventListener('timeupdate', () => {
+      if (m.duration > 0) dur = m.duration;
+      maks = Math.max(maks, m.currentTime);
+      if (dur > 0 && maks >= dur - Math.max(1.5, dur * 0.05)) window.__botSelesai = true; });
+    m.addEventListener('emptied', () => { if (dur > 0 && maks >= dur * 0.8) window.__botSelesai = true; });
+  }); }"""  # audio situs asli (diamati 13:4x): tanpa 'ended'; dipotong ±0,8 dtk sebelum akhir lalu sumber dimuat ulang (currentTime kembali 0)
 MEDIA_DURASI = ("() => { const m = [...document.querySelectorAll('video,audio')]"
                 ".find(m => !m.paused && m.currentTime > 0); return m ? m.duration : NaN; }")
 MAX_DURASI_MEDIA = 20 * 60  # detik; durasi tak terbaca atau lebih panjang dari ini = tak ditunggu, berhenti
