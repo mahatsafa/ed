@@ -218,6 +218,22 @@ def elemen_belum_didukung(page):
     return None
 
 
+JS_HALAMAN_BACAAN = """(sel) => {
+  const vis = (e) => { const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const q = (x) => [...document.querySelectorAll(x)].filter(vis);
+  const kontrol = q('input, select, textarea, [contenteditable], .dndZone, .dnditem, button')
+    .filter((e) => !e.closest('#DictionaryPanelContainer'));
+  return q(sel.cek).length === 0 && q(sel.next).length > 0 && kontrol.length === 0;
+}"""
+
+
+def halaman_bacaan(page):
+    """True kalau halaman hanya bacaan: Next terlihat, tetapi tidak ada Check Answer maupun kontrol isian
+    yang terlihat. Cukup Next sekali; situs mencatatnya sebagai dikerjakan. Ragu = False (bot berhenti)."""
+    return page.evaluate(JS_HALAMAN_BACAAN, {"cek": SEL["cek"], "next": SEL["next"]})
+
+
 def klik_start(page, timeout=TIMEOUT_MS):
     start = page.locator(SEL["start"])
     if not start.count():
@@ -271,6 +287,9 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
         perlu_cek = True
     if klik_start(page, timeout):
         dikerjakan.append("start")
+    if not dikerjakan and halaman_bacaan(page):
+        log.info("Halaman bacaan (tanpa soal): cukup Next")
+        return
     if not dikerjakan:
         screenshot_on_fail(page, "jenis_soal_tidak_dikenal")
         raise JenisSoalTidakDikenal("Halaman ini tidak punya elemen yang dikenal bot.")

@@ -368,6 +368,30 @@ with sync_playwright() as pw:
           rumah_timeout == [("ikon_rumah", pelajaran.TUNGGU_DASHBOARD_MS)])
     page.close()
 
+    page = browser.new_page()
+    kamus = '<div id="DictionaryPanelContainer" style="display:none"><input type="text"></div>'
+    bacaan = '<article><p>Teks artikel.</p></article>' + kamus
+    nav = '<a class="tasksBtnext" href="#">Next</a>'
+    def bacaan_ok(html):
+        page.set_content(html)
+        return pelajaran.halaman_bacaan(page)
+    check("bacaan: artikel + Next + kamus tersembunyi -> halaman bacaan", bacaan_ok(bacaan + nav) is True)
+    check("bacaan: tanpa Next -> bukan bacaan", bacaan_ok(bacaan) is False)
+    check("bacaan: ada Check Answer terlihat -> bukan bacaan",
+          bacaan_ok(bacaan + nav + '<li id="CheckAnswer">Check</li>') is False)
+    check("bacaan: ada isian teks terlihat -> bukan bacaan", bacaan_ok(bacaan + nav + '<input type="text">') is False)
+    check("bacaan: ada tombol/seret terlihat -> bukan bacaan",
+          bacaan_ok(bacaan + nav + '<button>Ok</button>') is False
+          and bacaan_ok(bacaan + nav + '<div class="dnditem">kata</div>') is False)
+    page.set_content(bacaan + nav)
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    check("bacaan: kerjakan_halaman tidak berhenti dan tidak mengklik apa pun",
+          not raises(lambda: pelajaran.kerjakan_halaman(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.set_content(bacaan + nav + '<input type="text">')
+    check("bacaan: halaman berisian teks tetap berhenti (gagal tertutup)",
+          raises(lambda: pelajaran.kerjakan_halaman(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+
     # --- Diagnosa (baca saja) di halaman tiruan ---
     page = browser.new_page()
     page.goto(URL_ASLI)
