@@ -313,9 +313,11 @@ def lanjut(page, timeout=TIMEOUT_MS):
     return True
 
 
-def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS):
+def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
     """Kerjakan halaman satu per satu lalu Next. Kembalikan alasan berhenti:
-    "habis" (Next tidak mengubah halaman), "test" (step Test, dikerjakan manual), "batas"."""
+    "habis" (Next tidak mengubah halaman), "test" (step Test, dikerjakan manual), "batas".
+    tanya (opsional): dipanggil tanya(page, alasan) kalau bot tak tahu cara mengerjakan halaman; harus menunggu
+    pengguna selesai mengerjakannya sendiri (sambil merekam), lalu bot lanjut Next. Tanpa tanya: bot berhenti (gagal tertutup)."""
     log = setup_logger()
     mulai = ringkasan["halaman"]
     while ringkasan["halaman"] - mulai < maks:
@@ -329,7 +331,14 @@ def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS):
         if page.locator(SEL["intro"]).count():
             log.info("Layar intro step: langsung Next")
         else:
-            kerjakan_halaman(page, ringkasan, timeout)
+            try:
+                kerjakan_halaman(page, ringkasan, timeout)
+            except JenisSoalTidakDikenal as err:
+                if tanya is None:
+                    raise
+                ringkasan["manual"] = ringkasan.get("manual", 0) + 1
+                log.warning("Bot tak tahu cara halaman ini (%s); menunggu pengguna mengerjakannya.", err)
+                tanya(page, str(err))
         if not lanjut(page, timeout):
             log.info("Next tidak mengubah halaman.")
             return "habis"
@@ -576,7 +585,7 @@ def catat_rencana(page, unit, lesson, rencana, timeout=TIMEOUT_MS):
                         unit, lesson, akan or "-", lewat or "-")
 
 
-def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN, hanya_baca=False):
+def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN, hanya_baca=False, tanya=None):
     """Mulai dari dashboard (atau area belajar), kerjakan lesson demi lesson sampai semua unit
     selesai, kecuali step Test yang dikerjakan manual. Berhenti kalau ada jenis soal tak dikenal.
     hanya_baca=True (uji kering): hanya berpindah unit/lesson/step dan mencatat rencana, tidak menjawab."""
@@ -608,7 +617,7 @@ def jalankan_pelajaran(page, timeout=TIMEOUT_MS, maks_halaman=MAX_TOTAL_HALAMAN,
                 catat_rencana(page, unit, target[0], rencana, timeout)
                 dilewati.add(target[0])  # lanjut ke lesson berikutnya tanpa menjawab apa pun
                 continue
-            kerjakan_berurutan(page, ringkasan, maks_halaman - ringkasan["halaman"], timeout)
+            kerjakan_berurutan(page, ringkasan, maks_halaman - ringkasan["halaman"], timeout, tanya)
         if langkah > MAX_STEP or ringkasan["halaman"] >= maks_halaman:
             return ringkasan
         kembali_ke_dashboard(page, timeout)

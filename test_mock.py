@@ -11,6 +11,7 @@ from playwright.sync_api import expect, sync_playwright
 from bot import URLS, buka_chrome, cdp_siap, load_credentials
 from helpers import LOG_DIR, setup_logger
 from login import login
+import belajar
 import diagnosa
 import pelajaran
 import tugas
@@ -390,6 +391,49 @@ with sync_playwright() as pw:
     page.set_content(bacaan + nav + '<input type="text">')
     check("bacaan: halaman berisian teks tetap berhenti (gagal tertutup)",
           raises(lambda: pelajaran.kerjakan_halaman(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.close()
+
+    page = browser.new_page()
+    isi_a = ('<p id="t">halaman A</p><input type="text"><a class="tasksBtnext" href="#" onclick="'
+             "document.getElementById('t').textContent='halaman B';document.querySelector('input').remove();"
+             'return false">Next</a>')
+    page.set_content(isi_a)
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    check("bantuan: tanpa tanya, halaman tak dikenal -> bot berhenti (gagal tertutup)",
+          raises(lambda: pelajaran.kerjakan_berurutan(page, ring, 5, 2000), pelajaran.JenisSoalTidakDikenal))
+    page.set_content(isi_a)
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    ditanya = []
+    alasan_henti = pelajaran.kerjakan_berurutan(page, ring, 5, 2000, tanya=lambda pg, alasan: ditanya.append(alasan))
+    check("bantuan: dengan tanya, bot bertanya sekali lalu lanjut Next ke halaman berikut",
+          len(ditanya) == 1 and "halaman B" in page.inner_text("body") and ring["manual"] == 1
+          and alasan_henti == "habis")
+    page.close()
+
+    page = browser.new_page()
+    page.set_content('<button id="btn-a" class="x">Mulai</button><input id="isi" type="text">'
+                     '<input id="rahasia" type="password">')
+    def pengguna():  # meniru pengguna: klik, ketik
+        page.click("#btn-a")
+        page.fill("#isi", "halo")
+        page.fill("#rahasia", "sandi123")
+    awalan = belajar.rekam_dan_tunggu(page, "uji", pengguna)
+    rek = json.loads((LOG_DIR / f"{awalan}_aksi.json").read_text(encoding="utf-8"))
+    jenis = [a["jenis"] for a in rek["aksi"]]
+    check("belajar: klik dan isian pengguna terekam (selektor + nilai)",
+          "click" in jenis and any("button#btn-a" in a["jalur"] for a in rek["aksi"] if a["jenis"] == "click")
+          and any(a["nilai"] == "halo" for a in rek["aksi"]))
+    check("belajar: isian password tidak disimpan nilainya",
+          all(a["nilai"] is None for a in rek["aksi"] if "rahasia" in a["jalur"])
+          and "sandi123" not in json.dumps(rek))
+    check("belajar: HTML sebelum dan sesudah tersimpan",
+          (LOG_DIR / f"{awalan}_sebelum_frame0.html").exists() and (LOG_DIR / f"{awalan}_sesudah_frame0.html").exists())
+    belajar.MAX_AKSI = 3
+    page.set_content('<button id="btn-a">Mulai</button>')  # dokumen baru: perekam bersih
+    awalan = belajar.rekam_dan_tunggu(page, "batas", lambda: [page.click("#btn-a") for _ in range(5)])
+    belajar.MAX_AKSI = 300
+    check("belajar: jumlah aksi dibatasi",
+          len(json.loads((LOG_DIR / f"{awalan}_aksi.json").read_text(encoding="utf-8"))["aksi"]) == 3)
     page.close()
 
     # --- Diagnosa (baca saja) di halaman tiruan ---

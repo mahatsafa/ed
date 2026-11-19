@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
+from belajar import rekam_dan_tunggu
 from helpers import setup_logger
 from login import login
 from pelajaran import jalankan_pelajaran
@@ -78,10 +79,19 @@ def buka_chrome(pw, url, port=PORT_CDP, tanpa_jendela=False, profil=PROFIL_CHROM
     raise RuntimeError(f"Port debug {port} tidak siap dalam {MAKS_TUNGGU_CHROME // 4} detik.")
 
 
+def tanya_pengguna(page, alasan):
+    """Bot tak tahu cara mengerjakan halaman: pengguna mengerjakannya sendiri di Chromium (bot merekam),
+    lalu Enter. Rekaman di logs/belajar_* dipakai untuk membuat handler baru."""
+    rekam_dan_tunggu(page, alasan, lambda: input(
+        f"Bot tak tahu caranya ({alasan}). Kerjakan halaman ini sendiri di Chromium (bot merekam), "
+        "lalu tekan Enter di sini agar bot lanjut... "))
+
+
 def jalankan(page, target, hanya_baca=False):
     """Situs asli: pengulang pelajaran. Mock: semua elemen dalam satu halaman."""
     if target == "real":
-        return jalankan_pelajaran(page, hanya_baca=hanya_baca)
+        tanya = tanya_pengguna if sys.stdin.isatty() and not hanya_baca else None  # tanpa terminal: berhenti
+        return jalankan_pelajaran(page, hanya_baca=hanya_baca, tanya=tanya)
     return jalankan_semua(page)
 
 
