@@ -702,7 +702,8 @@ def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS, lewat_ste
         return None
     if target in dicoba:  # sudah pernah dikerjakan tapi status belum selesai: jangan berputar-putar
         screenshot_on_fail(page, "tidak_ada_kemajuan")
-        raise RuntimeError(f"Tidak ada kemajuan: {target} dipilih lagi padahal sudah dikerjakan.")
+        status = [(s["nama"], s["status"]) for s in page.evaluate(JS_DAFTAR, "steps")]  # bukti untuk diagnosa
+        raise RuntimeError(f"Tidak ada kemajuan: {target} dipilih lagi padahal sudah dikerjakan. Status step: {status}")
     dicoba.add(target)
     lesson, si, step = target
     log.info("Target: lesson %r, step %r", lesson, step)
