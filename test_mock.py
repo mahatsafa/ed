@@ -545,6 +545,15 @@ with sync_playwright() as pw:
           page.evaluate("() => window.klik") == "tombol")
     page.close()
 
+    page = browser.new_page()  # situs asli, halaman menulis: tombol putar tersisa di luar layar, tanpa video
+    page.set_content('<div class="learning__RAMRButton learning__RAMRButton--play" '
+                     'style="position:absolute;left:-9999px;top:0;width:50px;height:30px"></div>'
+                     '<script>window.klik = 0; document.querySelector(".learning__RAMRButton--play")'
+                     '.addEventListener("click", () => { window.klik++; });</script>')
+    check("video: tombol putar di luar layar diabaikan (halaman tanpa video), tidak diklik",
+          pelajaran.putar_video(page, 2000) is False and page.evaluate("() => window.klik") == 0)
+    page.close()
+
     # --- Video harus diputar sampai habis; Reminder media di iframe (potongan HTML, properti media dipalsukan) ---
     def media_palsu(durasi_js, main_js="false"):
         return ('<script>window.main = ' + main_js + '; window.t = 1; window.selesai = false; window.dur = ' + durasi_js + ';'

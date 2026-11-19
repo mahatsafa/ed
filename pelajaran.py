@@ -113,6 +113,16 @@ def klik_header(page, timeout=TIMEOUT_MS):
         tutup_modal(page, timeout)
 
 
+JS_DI_LAYAR = """(e) => { const r = e.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight; }"""
+
+
+def di_layar(locator):
+    """Elemen ada di dalam layar. Situs asli menyisakan tombol putar di luar layar pada halaman tanpa video
+    (Playwright tetap menganggapnya terlihat, lalu kliknya timeout)."""
+    return locator.evaluate(JS_DI_LAYAR)
+
+
 def putar_video(page, timeout=TIMEOUT_MS):
     overlay = page.locator(SEL["video_overlay"])
     kustom = page.locator(SEL["video_kustom"])
@@ -122,11 +132,11 @@ def putar_video(page, timeout=TIMEOUT_MS):
             overlay.first.wait_for(state="visible", timeout=min(timeout, 3000))
         except PWTimeout:
             pass
-    if overlay.count() and overlay.first.is_visible():
+    if overlay.count() and overlay.first.is_visible() and di_layar(overlay.first):
         click(page, overlay.first, "video_tombol_putar", timeout)
-    elif kustom.count() and kustom.is_visible():
+    elif kustom.count() and kustom.is_visible() and di_layar(kustom):
         click(page, kustom, "video_tombol_putar", timeout)
-    elif video.count() and video.is_visible():
+    elif video.count() and video.is_visible() and di_layar(video):
         if video.evaluate("v => v.paused"):  # jangan klik kalau sudah berjalan (bisa menjeda)
             click(page, video, "video", timeout)
     else:
