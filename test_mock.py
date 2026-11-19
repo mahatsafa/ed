@@ -676,6 +676,30 @@ with sync_playwright() as pw:
           pelajaran.overlay_menutupi(page) is False and pelajaran.tunggu_reminder(page) is False)
     page.close()
 
+    # --- Status step yang terlambat diperbarui situs (bukti situs asli 12:31: inProgress, ±40 dtk kemudian done) ---
+    def daftar_steps(status_practice, jadi_done_ms=None):
+        skrip = ('<script>setTimeout(() => { document.getElementById("p").className = "progressBar__progress--done"; }, '
+                 + str(jadi_done_ms) + ');</script>') if jadi_done_ms else ""
+        return ('<div id="learning__dropDownListW_steps">'
+                '<div class="learning__dropDownList_item"><span class="learning__dropDownList_itemNameText">1. Explore</span>'
+                '<div class="progressBar__progress--done"></div></div>'
+                '<div class="learning__dropDownList_item"><span class="learning__dropDownList_itemNameText">2. Practice</span>'
+                f'<div id="p" class="progressBar__progress--{status_practice}"></div></div></div>' + skrip)
+    page = browser.new_page()
+    page.set_content(daftar_steps("inProgress", 1200))
+    check("status step: inProgress lalu done 1,2 dtk kemudian -> ditunggu, True",
+          pelajaran.tunggu_step_selesai(page, 1, detik=10) is True)
+    page.close()
+    page = browser.new_page()
+    page.set_content(daftar_steps("inProgress"))
+    check("status step: tetap inProgress -> False setelah batas tunggu (gagal tertutup)",
+          pelajaran.tunggu_step_selesai(page, 1, detik=4) is False)
+    page.close()
+    page = browser.new_page()
+    page.set_content(daftar_steps("done"))
+    check("status step: sudah done -> True langsung", pelajaran.tunggu_step_selesai(page, 1, detik=4) is True)
+    page.close()
+
     # --- Soal menulis prWriting (potongan HTML meniru rekaman: TinyMCE di iframe, Done, modal "Oops") ---
     def halaman_tulis(tolak=False):
         return ('<div class="learning__headerIW">Type your answer in the box and click Done.</div>'

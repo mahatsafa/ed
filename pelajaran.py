@@ -782,6 +782,27 @@ def cari_target(page, dilewati, timeout=TIMEOUT_MS, lewat_step=frozenset()):
     return None
 
 
+TUNGGU_STATUS_DETIK = 60  # batas tunggu status step diperbarui situs sesudah dikerjakan
+JEDA_STATUS_MS = 3000
+
+
+def tunggu_step_selesai(page, indeks, detik=TUNGGU_STATUS_DETIK):
+    """Tunggu status step ke-`indeks` (di lesson yang sedang dipilih) jadi "done" (polling terbatas, baca saja).
+    Bukti situs asli: status Practice masih "inProgress" 3 detik sesudah selesai, lalu "done" ±40 detik kemudian."""
+    for _ in range(max(1, int(detik * 1000 / JEDA_STATUS_MS))):  # batas atas
+        daftar = page.evaluate(JS_DAFTAR, "steps")
+        if indeks < len(daftar) and daftar[indeks]["status"] == "done":
+            return True
+        page.wait_for_timeout(JEDA_STATUS_MS)
+    return False
+
+
+def gagal_tanpa_kemajuan(page, target):
+    screenshot_on_fail(page, "tidak_ada_kemajuan")
+    status = [(s["nama"], s["status"]) for s in page.evaluate(JS_DAFTAR, "steps")]  # bukti untuk diagnosa
+    raise RuntimeError(f"Tidak ada kemajuan: {target} dipilih lagi padahal sudah dikerjakan. Status step: {status}")
+
+
 def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS, lewat_step=frozenset()):
     """Dari area belajar: pilih lesson pertama yang belum selesai, lalu step pertama yang belum selesai
     (bukan Test), dan tunggu halaman pertamanya siap. None kalau unit ini habis."""
@@ -789,10 +810,14 @@ def buka_lesson_berikutnya(page, dilewati, dicoba, timeout=TIMEOUT_MS, lewat_ste
     target = cari_target(page, dilewati, timeout, lewat_step)
     if target is None:
         return None
-    if target in dicoba:  # sudah pernah dikerjakan tapi status belum selesai: jangan berputar-putar
-        screenshot_on_fail(page, "tidak_ada_kemajuan")
-        status = [(s["nama"], s["status"]) for s in page.evaluate(JS_DAFTAR, "steps")]  # bukti untuk diagnosa
-        raise RuntimeError(f"Tidak ada kemajuan: {target} dipilih lagi padahal sudah dikerjakan. Status step: {status}")
+    if target in dicoba:  # sudah dikerjakan tapi statusnya belum selesai: situs bisa terlambat memperbarui (±40 dtk)
+        if not tunggu_step_selesai(page, target[1]):
+            gagal_tanpa_kemajuan(page, target)
+        target = cari_target(page, dilewati, timeout, lewat_step)
+        if target is None:
+            return None
+        if target in dicoba:
+            gagal_tanpa_kemajuan(page, target)
     dicoba.add(target)
     lesson, si, step = target
     log.info("Target: lesson %r, step %r", lesson, step)
