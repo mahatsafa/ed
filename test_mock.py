@@ -731,13 +731,13 @@ with sync_playwright() as pw:
     page.close()
 
     # --- Reminder basi: pager sudah --done tapi situs belum menyinkronkan (situs asli Lesson 2, 13:16) ---
-    def reminder_basi(kelas3="learning__tasksNav_task--done learning__tasksNav_task--current"):
+    def reminder_basi(kelas3="learning__tasksNav_task--done learning__tasksNav_task--current", teks="the activity 2"):
         return ('<div class="learning__tasksNav_tasksW">'
                 '<div class="learning__tasksNav_task learning__tasksNav_task--done">1</div>'
                 '<div class="learning__tasksNav_task learning__tasksNav_task--done">2</div>'
                 f'<div class="learning__tasksNav_task {kelas3}">3</div></div>'
                 '<div id="isi">awal</div><a class="tasksBtnext" href="#">Next</a>'
-                '<div id="rem" style="display:none"><p>You need to complete the activity 2 to achieve progress in this step.</p>'
+                '<div id="rem" style="display:none"><p>You need to complete ' + teks + ' to achieve progress in this step.</p>'
                 '<a id="c" href="#">Continue</a> <a id="s" href="#">Stay in this step</a></div>'
                 '<script>let n = 0; window.klikPager = 0; window.lewat = false;'
                 'document.querySelectorAll(".learning__tasksNav_task").forEach((e) => e.addEventListener("click", () => { window.klikPager++; }));'
@@ -756,6 +756,40 @@ with sync_playwright() as pw:
           and page.evaluate("() => window.lewat") is False and page.evaluate("() => window.klikPager") == 0)  # 0: tak ada pindah halaman
     page.close()
     pelajaran.JEDA_SINKRON_MS = asli_jeda
+    pelajaran.JEDA_SINKRON_MS = 200
+    page = browser.new_page()
+    page.set_content(reminder_basi(teks="all the activities"))  # varian tanpa nomor (situs asli 13:51)
+    page.click(".tasksBtnext")
+    check("reminder 'all the activities' (semua pager --done = basi): tunggu sinkron, Next lagi -> lanjut, Continue tak diklik",
+          pelajaran.reminder_terlihat(page) is True
+          and pelajaran.selesaikan_reminder(page, ring, 3000) == "lanjut" and page.inner_text("#isi") == "akhir"
+          and page.evaluate("() => window.lewat") is False)
+    page.close()
+    pelajaran.JEDA_SINKRON_MS = asli_jeda
+    def tahan_pindah(teks):  # klik "pindah" ditahan Reminder; Continue baru membuat perpindahan terjadi
+        return ('<div id="EdoFrameBox" style="position:fixed;inset:0;background:#0006;z-index:9">'
+                '<div style="background:#fff;margin:50px"><h3>Reminder!</h3><p>' + teks + '</p>'
+                '<a id="c" href="#">Continue</a> <a id="s" href="#">Stay in this step</a></div></div>'
+                '<script>window.pindah = false; window.klikC = 0;'
+                'document.getElementById("c").addEventListener("click", (e) => { e.preventDefault(); window.klikC++; window.pindah = true;'
+                ' document.getElementById("EdoFrameBox").remove(); });</script>')
+    page = browser.new_page()
+    page.set_content(tahan_pindah("You need to complete all the activities to achieve progress in this step."))
+    pelajaran.lepas_reminder_pindah(page, lambda: page.evaluate("() => window.pindah === true"), detik=5)
+    check("pindah ditahan Reminder 'all the activities': Continue diklik sekali, perpindahan terjadi",
+          page.evaluate("() => window.klikC") == 1 and page.evaluate("() => window.pindah") is True)
+    page.close()
+    page = browser.new_page()
+    page.set_content(tahan_pindah("Sesuatu yang lain sama sekali."))
+    check("pindah ditahan Reminder bertulisan tak dikenal -> berhenti, Continue tidak diklik",
+          raises(lambda: pelajaran.lepas_reminder_pindah(page, lambda: page.evaluate("() => window.pindah === true"), detik=5),
+                 pelajaran.JenisSoalTidakDikenal) and page.evaluate("() => window.klikC") == 0)
+    page.close()
+    page = browser.new_page()
+    page.set_content('<p>tanpa reminder</p><script>window.pindah = true;</script>')
+    pelajaran.lepas_reminder_pindah(page, lambda: page.evaluate("() => window.pindah === true"), detik=5)
+    check("pindah tanpa Reminder: langsung kembali", True)
+    page.close()
     page = browser.new_page()
     page.set_content(reminder_basi())
     pelajaran.ke_halaman(page, 3, 3000)

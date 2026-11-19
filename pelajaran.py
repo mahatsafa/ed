@@ -469,6 +469,7 @@ def lanjut(page, timeout=TIMEOUT_MS):
 
 REMINDER = re.compile(r"You need to complete the activit(?:y|ies) (\d+(?:\s*(?:,|and)\s*\d+)*)")  # "activity 2", "activities 3, 4 and 7"
 REMINDER_MEDIA = re.compile(r"You need to play the video/audio")
+REMINDER_SEMUA = re.compile(r"You need to complete all the activities")  # tanpa nomor: muncul juga saat meninggalkan step yang belum selesai
 JUDUL_REMINDER = re.compile(r"^\s*Reminder!\s*$")
 SEL_PAGER = ".learning__tasksNav_tasksW .learning__tasksNav_task"  # nomor halaman di bawah
 MAX_PERCOBAAN_REMINDER = 5  # batas siklus "tetap di step" per jendela Reminder
@@ -486,7 +487,7 @@ def cari_teks(page, pola, exact=False):
 
 
 def reminder_terlihat(page):
-    return any(cari_teks(page, p) for p in (REMINDER, REMINDER_MEDIA, JUDUL_REMINDER))
+    return any(cari_teks(page, p) for p in (REMINDER, REMINDER_MEDIA, REMINDER_SEMUA, JUDUL_REMINDER))
 
 
 JS_OVERLAY = """() => { const e = document.elementFromPoint(innerWidth / 2, innerHeight * 0.8);
@@ -520,6 +521,32 @@ def tunggu_reminder(page):
     return False
 
 
+TUNGGU_PINDAH_DETIK = 20  # batas tunggu perpindahan lesson/step/dashboard sebelum Reminder "meninggalkan step" dicurigai
+
+
+def lepas_reminder_pindah(page, sudah_pindah, detik=TUNGGU_PINDAH_DETIK):
+    """Sesudah klik yang bermaksud MENINGGALKAN halaman (pilih lesson/step, ikon rumah): kalau situs menahan dengan
+    Reminder (step belum selesai; situs asli 13:51), klik Continue agar perpindahan jalan. Step itu tetap belum
+    selesai dan akan dipilih lagi nanti oleh cari_target. Reminder yang tak dikenal = berhenti (gagal tertutup)."""
+    log = setup_logger()
+    for _ in range(max(1, int(detik * 1000 / JEDA_POLL_MS))):  # batas atas
+        try:
+            if sudah_pindah():
+                return
+        except Exception:  # halaman sedang berpindah (konteks lama hilang)
+            pass
+        if overlay_menutupi(page) or reminder_terlihat(page):
+            if tunggu_reminder(page):
+                if not any(cari_teks(page, p) for p in (REMINDER, REMINDER_SEMUA, REMINDER_MEDIA)):
+                    screenshot_on_fail(page, "reminder_pindah_tak_dikenal")
+                    raise JenisSoalTidakDikenal("Reminder saat berpindah dengan teks yang tak dikenal bot.")
+                log.info("Reminder saat meninggalkan step yang belum selesai: Continue (pindah dilanjutkan).")
+                click(page, cari_teks(page, "Continue", exact=True), "reminder_continue_pindah")
+                tunggu_stabil(page)
+            continue
+        page.wait_for_timeout(JEDA_POLL_MS)
+
+
 def ke_halaman(page, nomor, timeout=TIMEOUT_MS):
     """Pindah ke halaman soal bernomor `nomor` (mulai 1) lewat pager bawah."""
     item = page.locator(SEL_PAGER).nth(nomor - 1)
@@ -549,11 +576,15 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
             lanjut(page, timeout)
             continue
         ada = cari_teks(page, REMINDER)
-        if ada is None:  # jendela Reminder bertulisan lain: jangan menebak dan jangan klik Continue
+        semua = None if ada else cari_teks(page, REMINDER_SEMUA)
+        if ada is None and semua is None:  # jendela Reminder bertulisan lain: jangan menebak dan jangan klik Continue
             screenshot_on_fail(page, "reminder_tak_dikenal")
             raise JenisSoalTidakDikenal("Jendela Reminder dengan teks yang tak dikenal bot.")
         jumlah = page.locator(SEL_PAGER).count()
-        daftar = [int(x) for x in re.findall(r"\d+", REMINDER.search(ada.inner_text()).group(1))]
+        if ada is not None:
+            daftar = [int(x) for x in re.findall(r"\d+", REMINDER.search(ada.inner_text()).group(1))]
+        else:  # "all the activities": tanpa nomor, pager yang menunjukkan mana yang belum --done
+            daftar = list(range(1, jumlah + 1))
         basi = {n for n in daftar if 1 <= n <= jumlah  # pager sudah menandai selesai: situs belum menyinkronkan
                 and "--done" in (page.locator(SEL_PAGER).nth(n - 1).get_attribute("class") or "")}
         nomor = next((n for n in daftar if n not in dicoba and n not in basi and 1 <= n <= jumlah), None)  # satu per siklus
@@ -723,6 +754,7 @@ def pilih_item(page, jenis, indeks, timeout=TIMEOUT_MS):
     sudah_aktif = "--current" in (item.get_attribute("class") or "")
     if not sudah_aktif:
         click(page, item.locator(".learning__dropDownList_itemName"), f"pilih_{jenis}_{indeks + 1}", timeout)
+        lepas_reminder_pindah(page, lambda: "--current" in (item.get_attribute("class", timeout=1000) or ""))
         periksa(page, f"{jenis}_{indeks + 1}_aktif", lambda: expect(item).to_have_class(
             re.compile(r"--current"), timeout=max(timeout, TUNGGU_AREA_MS)))  # pindah lesson di situs asli bisa >10 dtk
     tunggu_stabil(page)  # beri waktu daftar menutup sendiri sebelum dicek
@@ -885,6 +917,7 @@ def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
 def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
     tunggu = max(timeout, TUNGGU_DASHBOARD_MS)  # klik menunggu navigasi; situs asli kadang >10 detik
     click(page, page.locator(SEL["rumah"]), "ikon_rumah", tunggu)
+    lepas_reminder_pindah(page, lambda: page.locator(SEL["kartu_unit"]).count() > 0)
     wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", tunggu)
 
 
