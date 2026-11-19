@@ -485,12 +485,12 @@ with sync_playwright() as pw:
     page.close()
 
     # --- Reminder dan video terlambat (potongan HTML) ---
-    def app_reminder(halaman2):
+    def app_reminder(halaman2, teks="activity 2"):
         return ('<div class="learning__tasksNav_tasksW">' + "".join(
             f'<div class="learning__tasksNav_task{" learning__tasksNav_task--current" if i == 3 else ""}">{i}</div>'
             for i in (1, 2, 3)) + '</div><div id="isi">halaman 3</div>' + halaman2 +
             '<a class="tasksBtnext" href="#">Next</a>'
-            '<div id="rem" style="display:none"><p>You need to complete the activity 2 to achieve progress in this step.</p>'
+            '<div id="rem" style="display:none"><p>You need to complete the ' + teks + ' to achieve progress in this step.</p>'
             '<a id="c" href="#">Continue</a> <a id="s" href="#">Stay in this step</a></div>'
             '<script>let aktif = 3, selesai2 = false, kata = "";'
             'const item = [...document.querySelectorAll(".learning__tasksNav_task")];'
@@ -517,6 +517,21 @@ with sync_playwright() as pw:
     page.click(".tasksBtnext")
     check("reminder: halaman tak bisa dikerjakan -> Continue (step dilewati)",
           pelajaran.selesaikan_reminder(page, ring, 3000) == "lewat" and page.evaluate("() => window.lewat === true"))
+    page.close()
+    page = browser.new_page()  # situs asli: "activities 3, 4 and 7" (jamak, beberapa nomor)
+    page.set_content(app_reminder("<p>artikel</p>", "activities 2 and 3"))
+    page.click(".tasksBtnext")
+    check("reminder jamak ('activities 2 and 3'): nomor pertama yang bisa dikerjakan dipakai -> lanjut",
+          pelajaran.reminder_terlihat(page) is True
+          and pelajaran.selesaikan_reminder(page, ring, 3000) == "lanjut" and "selesai" in page.inner_text("#isi"))
+    page.close()
+    page = browser.new_page()  # Reminder sudah terbuka sebelum bot mengerjakan halaman apa pun (situs asli, 11:15)
+    page.set_content(app_reminder("<p>artikel</p>"))
+    page.evaluate("() => { document.getElementById('rem').style.display = 'block'; }")
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    alasan = pelajaran.kerjakan_berurutan(page, ring, 1, 3000)
+    check("reminder sudah terbuka sejak awal: ditangani sebelum halaman dikerjakan",
+          not pelajaran.reminder_terlihat(page) and "selesai" in page.inner_text("#isi") and alasan in ("batas", "habis"))
     page.close()
     page = browser.new_page()
     page.set_content('<video id="MP" width="100" height="60"></video>'

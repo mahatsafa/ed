@@ -408,7 +408,7 @@ def lanjut(page, timeout=TIMEOUT_MS):
     return True
 
 
-REMINDER = re.compile(r"You need to complete the activity (\d+)")
+REMINDER = re.compile(r"You need to complete the activit(?:y|ies) (\d+(?:\s*(?:,|and)\s*\d+)*)")  # "activity 2", "activities 3, 4 and 7"
 REMINDER_MEDIA = re.compile(r"You need to play the video/audio")
 JUDUL_REMINDER = re.compile(r"^\s*Reminder!\s*$")
 SEL_PAGER = ".learning__tasksNav_tasksW .learning__tasksNav_task"  # nomor halaman di bawah
@@ -459,9 +459,10 @@ def selesaikan_reminder(page, ringkasan, timeout=TIMEOUT_MS):
         if ada is None:  # jendela Reminder bertulisan lain: jangan menebak dan jangan klik Continue
             screenshot_on_fail(page, "reminder_tak_dikenal")
             raise JenisSoalTidakDikenal("Jendela Reminder dengan teks yang tak dikenal bot.")
-        nomor = int(REMINDER.search(ada.inner_text()).group(1))
         jumlah = page.locator(SEL_PAGER).count()
-        if nomor in dicoba or not 1 <= nomor <= jumlah:
+        daftar = [int(x) for x in re.findall(r"\d+", REMINDER.search(ada.inner_text()).group(1))]
+        nomor = next((n for n in daftar if n not in dicoba and 1 <= n <= jumlah), None)  # satu aktivitas per siklus
+        if nomor is None:
             break
         dicoba.add(nomor)
         log.info("Reminder: aktivitas %d belum selesai; tetap di step dan mengerjakannya.", nomor)
@@ -494,6 +495,8 @@ def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
         ringkasan["halaman"] += 1
         log.info("== Halaman %d", ringkasan["halaman"])
         tunggu_stabil(page)
+        if reminder_terlihat(page) and selesaikan_reminder(page, ringkasan, timeout) == "lewat":  # sudah terbuka sejak awal
+            return "lewat"
         if sedang_test(page):
             ringkasan["halaman"] -= 1
             log.info("Step Test (dikerjakan manual): berhenti di sini, tidak disentuh.")
