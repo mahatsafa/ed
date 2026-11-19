@@ -539,8 +539,9 @@ def buka_unit(page, unit_dicoba, timeout=TIMEOUT_MS):
 
 
 def kembali_ke_dashboard(page, timeout=TIMEOUT_MS):
-    click(page, page.locator(SEL["rumah"]), "ikon_rumah", timeout)
-    wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", max(timeout, TUNGGU_DASHBOARD_MS))
+    tunggu = max(timeout, TUNGGU_DASHBOARD_MS)  # klik menunggu navigasi; situs asli kadang >10 detik
+    click(page, page.locator(SEL["rumah"]), "ikon_rumah", tunggu)
+    wait_visible(page, page.locator(SEL["kartu_unit"]).first, "dashboard", tunggu)
 
 
 def catat_rencana(page, unit, lesson, rencana, timeout=TIMEOUT_MS):

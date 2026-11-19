@@ -354,6 +354,20 @@ with sync_playwright() as pw:
           raises(lambda: pelajaran.jalankan_pelajaran(page, timeout=2000), pelajaran.JenisSoalTidakDikenal))
     page.close()
 
+    page = browser.new_page()
+    page.goto(URL_ASLI)
+    rumah_asli, rumah_timeout = pelajaran.click, []
+    pelajaran.click = lambda pg, loc, nama, timeout=0, **o: rumah_timeout.append((nama, timeout))
+    try:
+        pelajaran.kembali_ke_dashboard(page, 4000)
+    except Exception:
+        pass  # wait_visible dashboard boleh gagal; yang diperiksa hanya batas klik
+    finally:
+        pelajaran.click = rumah_asli
+    check("kursus: klik ikon rumah memakai batas tunggu dashboard (navigasi lambat), bukan batas klik biasa",
+          rumah_timeout == [("ikon_rumah", pelajaran.TUNGGU_DASHBOARD_MS)])
+    page.close()
+
     # --- Diagnosa (baca saja) di halaman tiruan ---
     page = browser.new_page()
     page.goto(URL_ASLI)
