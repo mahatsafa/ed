@@ -88,7 +88,8 @@ git fetch -q && git status -sb | head -2   # harapan: tidak ada 'ahead'
 cd ~/engdis-bot/.claude/worktrees/tahap-2-elemen
 git status --short && git log --oneline -3
 ps -eo args | grep -E "test_mock|bot.py" | grep -v grep | wc -l   # harapan: 0
-~/engdis-bot/.venv/bin/python test_mock.py | grep -c LULUS   # harapan: 99, tanpa GAGAL (~3 menit)
+~/engdis-bot/.venv/bin/python -u test_mock.py > logs/test_mock_terakhir.txt 2>&1   # ~10 menit: jalankan di latar belakang
+grep -c LULUS logs/test_mock_terakhir.txt; grep -c GAGAL logs/test_mock_terakhir.txt   # harapan: 138 dan 0
 ```
 Aturan yang berlaku: ikuti `~/.claude/CLAUDE.md`. Perubahan perilaku kode wajib disertai uji otomatis;
 banyak file diubah atomik (skrip patch Python); commit jujur (tulis yang belum terbukti).
@@ -100,11 +101,36 @@ Alur kerja yang berhasil: pemilik akun menjalankan bot, menempel log + screensho
 Lanjutkan proyek ~/engdis-bot di worktree .claude/worktrees/tahap-2-elemen/ (jangan sentuh root).
 Baca HANDOFF.md lebih dulu. Sesi lalu: bot sudah menjawab pencocokan, cloze, dropdown di situs asli;
 ditambah mode belajar (bot merekam saat saya mengerjakan halaman yang tak dikenal), handler dikte,
-bacaan, jendela Reminder (test_mock 99 lulus, commit 46f281e). Langkah berikutnya: saya jalankan
-`bot.py --target real --buka` dan menempel log / screenshot / isi logs/belajar_*; periksa dan perbaiki
-satu per satu. Keputusan yang saya tunda: step "Let's review" unit 9 (tanpa progress bar) dikerjakan
-manual atau oleh bot. Aturan: Test dikerjakan manual oleh saya dan dilewati bot, tidak pernah
+bacaan, jendela Reminder, soal seret (klasifikasi), menulis, audio/video sampai habis (test_mock 138 lulus,
+commit d4687c0). Bot kini kujalankan sendiri di Chromium yang sudah login (`--attach http://127.0.0.1:9222`),
+Lesson 1 dan 2 selesai, Lesson 3 Practice berhenti di soal suara. Baca HANDOFF.md bagian 7. Keputusan yang
+menunggu: cara menangani soal suara (mikrofon); juga step "Let's review" unit 9 (tanpa progress bar). Aturan: Test dikerjakan manual oleh saya dan dilewati bot, tidak pernah
 menyentuh See Answer atau membaca kelas hasil jawaban, jawaban salah tidak masalah, tanpa sleep tetap,
 gagal = screenshot + log, keputusan ambigu: berhenti dan tanya. Jangan jalankan dua sesi bersamaan di
 worktree ini. Commit tiap bagian selesai setelah test_mock lulus.
 ```
+
+## 7. Pembaruan sesi 2026-11-19 (bot dijalankan sendiri di situs asli, ±12 jalan)
+Cara jalan: `bot.py --target real --attach http://127.0.0.1:9222 > logs/jalan_real.txt` (Chromium sudah login di
+port 9222). Tanpa terminal interaktif bot berhenti (gagal tertutup) di halaman yang tak dikenal.
+
+Terbukti di situs asli (log + screenshot, bukan tebakan):
+- Handler: video/audio diputar sampai habis; dropdown, cloze, pencocokan, pilihan ganda, menulis (TinyMCE, 14 kata),
+  klasifikasi `prCl` (item dibagi ke kolom) semuanya `OK: tugas tercatat selesai`; Reminder bernomor, jamak,
+  dan basi ditangani; Lesson 1 dan 2 selesai, step Test dilewati.
+- Pelajaran dari situs: kartu Reminder ada di iframe `MsgPage.html` dan memuat belakangan (kartu sempat kosong);
+  status daftar step terlambat diperbarui (±40 dtk) sedangkan penanda `--done` di pager andal; MCQ yang dijawab
+  salah tetap dihitung selesai; audio `#syncAudioPlayer` dipakai ulang antar halaman dan TIDAK memicu `ended`
+  (dipotong ±0,8 dtk sebelum akhir lalu dimuat ulang); meninggalkan step yang belum selesai memunculkan Reminder
+  "complete all the activities" (Continue/Stay); halaman bacaan punya `button#sitemenu__openMenuBtn`.
+- Jangan meninggalkan tab di tengah step atau dengan Reminder terbuka saat bot dijalankan (bot kini membersihkannya).
+
+Belum terbukti di situs asli: handler `prTextToPic` (kata ke gambar) dan penanganan Reminder "all the activities"
+di Next halaman terakhir; peringatan "tak terbukti selesai" untuk MCQ salah hanyalah penanda pager yang tak andal.
+
+KEPUTUSAN MENUNGGU (pemilik akun): soal suara (`.answersWrapper.webRtc`, Lesson 3 Practice halaman 4/5).
+Bukti: klik pilihan tak berpengaruh; tombol Start nonaktif; sesi Speech Recognition tak pernah terbentuk tanpa mikrofon.
+- A (rekomendasi): dikerjakan manual oleh pemilik akun; bot berhenti di sana, lalu dilanjutkan.
+- B: bot melewati (Continue) dan menerima step tidak pernah `done`.
+- C: mikrofon virtual (flag Chromium + file audio ucapan); ketergantungan baru, perlu persetujuan.
+Posisi terakhir: Lesson 3, Step 2 Practice, halaman 4/5 (soal suara); Lesson 1 dan 2 sudah done.
