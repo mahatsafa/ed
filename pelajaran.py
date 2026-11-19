@@ -438,6 +438,37 @@ def reminder_terlihat(page):
     return any(cari_teks(page, p) for p in (REMINDER, REMINDER_MEDIA, JUDUL_REMINDER))
 
 
+JS_OVERLAY = """() => { const e = document.elementFromPoint(innerWidth / 2, innerHeight * 0.8);
+  return !!e && !!e.closest('#EdoFrameBox'); }"""  # #EdoFrameBox: lapisan yang menutupi halaman selama jendela terbuka
+TUNGGU_REMINDER_DETIK = 15  # batas tunggu teks Reminder muncul sesudah lapisan menutupi halaman
+JEDA_POLL_MS = 300
+
+
+def overlay_menutupi(page):
+    return page.evaluate(JS_OVERLAY)
+
+
+def tunggu_reminder(page):
+    """Lapisan #EdoFrameBox menutupi halaman tapi teks Reminder belum terbaca (situs asli 11:36: kartu sempat
+    kosong). Tunggu teksnya muncul (polling terbatas). True kalau Reminder terbaca; False kalau tidak ada lapisan
+    atau teks tak kunjung muncul (lapisan tak dikenal: isi tiap frame dicatat sebagai bukti)."""
+    log = setup_logger()
+    if not overlay_menutupi(page):
+        return reminder_terlihat(page)
+    for _ in range(int(TUNGGU_REMINDER_DETIK * 1000 / JEDA_POLL_MS)):  # batas atas
+        if reminder_terlihat(page):
+            return True
+        page.wait_for_timeout(JEDA_POLL_MS)
+    log.error("Lapisan #EdoFrameBox menutupi halaman, teks Reminder tak muncul dalam %d dtk.", TUNGGU_REMINDER_DETIK)
+    for i, frame in enumerate(page.frames):
+        try:
+            isi = frame.evaluate("() => document.body ? document.body.innerHTML.slice(0, 400) : ''")
+        except Exception as err:  # frame sedang berpindah
+            isi = f"(tak terbaca: {err})"
+        log.error("frame %d %s: %s", i, frame.url[:80], isi.replace("\n", " "))
+    return False
+
+
 def ke_halaman(page, nomor, timeout=TIMEOUT_MS):
     """Pindah ke halaman soal bernomor `nomor` (mulai 1) lewat pager bawah."""
     item = page.locator(SEL_PAGER).nth(nomor - 1)
@@ -505,8 +536,12 @@ def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
         ringkasan["halaman"] += 1
         log.info("== Halaman %d", ringkasan["halaman"])
         tunggu_stabil(page)
-        if reminder_terlihat(page) and selesaikan_reminder(page, ringkasan, timeout) == "lewat":  # sudah terbuka sejak awal
-            return "lewat"
+        if tunggu_reminder(page):  # Reminder sudah terbuka sejak awal
+            if selesaikan_reminder(page, ringkasan, timeout) == "lewat":
+                return "lewat"
+        elif overlay_menutupi(page):
+            screenshot_on_fail(page, "overlay_tak_dikenal")
+            raise JenisSoalTidakDikenal("Lapisan menutupi halaman tapi bukan Reminder yang dikenal bot.")
         if sedang_test(page):
             ringkasan["halaman"] -= 1
             log.info("Step Test (dikerjakan manual): berhenti di sini, tidak disentuh.")
@@ -523,6 +558,9 @@ def kerjakan_berurutan(page, ringkasan, maks, timeout=TIMEOUT_MS, tanya=None):
                 log.warning("Bot tak tahu cara halaman ini (%s); menunggu pengguna mengerjakannya.", err)
                 tanya(page, str(err))
         berganti = lanjut(page, timeout)
+        if not berganti and not tunggu_reminder(page) and overlay_menutupi(page):
+            screenshot_on_fail(page, "overlay_tak_dikenal")
+            raise JenisSoalTidakDikenal("Lapisan menutupi halaman tapi bukan Reminder yang dikenal bot.")
         if reminder_terlihat(page):  # Reminder membuat Next tampak "tak berubah"; periksa sebelum menyimpulkan habis
             if selesaikan_reminder(page, ringkasan, timeout) == "lewat":
                 return "lewat"

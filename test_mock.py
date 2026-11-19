@@ -607,6 +607,33 @@ with sync_playwright() as pw:
           and raises(lambda: pelajaran.selesaikan_reminder(page, ring, 2000), pelajaran.JenisSoalTidakDikenal))
     page.close()
 
+    # --- Lapisan #EdoFrameBox: kartu Reminder sempat kosong (situs asli 11:36) ---
+    lapisan = '<div id="EdoFrameBox" style="position:fixed;inset:0;background:#0006;z-index:9"></div>'
+    tulis_kartu = ('<script>setTimeout(() => { document.getElementById("EdoFrameBox").innerHTML = '
+                   '"<div style=\'background:#fff;margin:50px\'><h3>Reminder!</h3><p>You need to complete the '
+                   'activities 2 and 3 to achieve progress in this step.</p></div>"; }, 800);</script>')
+    page = browser.new_page()
+    page.set_content('<p>halaman</p>' + lapisan + tulis_kartu)  # kartu kosong dulu, teks muncul 0,8 dtk kemudian
+    check("lapisan: teks Reminder muncul belakangan -> ditunggu, lalu terbaca",
+          pelajaran.overlay_menutupi(page) is True and pelajaran.tunggu_reminder(page) is True)
+    page.close()
+    page = browser.new_page()
+    page.set_content('<p>halaman</p>' + lapisan)  # kartu tetap kosong
+    asli = pelajaran.TUNGGU_REMINDER_DETIK
+    pelajaran.TUNGGU_REMINDER_DETIK = 1
+    check("lapisan: teks tak pernah muncul -> tidak dianggap Reminder (False), bukti frame dicatat",
+          pelajaran.tunggu_reminder(page) is False)
+    ring = {"halaman": 0, "tak_terverifikasi": 0}
+    check("lapisan: berurutan dengan lapisan tak dikenal -> berhenti, tidak mengklik apa pun",
+          raises(lambda: pelajaran.kerjakan_berurutan(page, ring, 2, 2000), pelajaran.JenisSoalTidakDikenal))
+    pelajaran.TUNGGU_REMINDER_DETIK = asli
+    page.close()
+    page = browser.new_page()
+    page.set_content('<p>halaman biasa</p>')
+    check("lapisan: tanpa lapisan -> overlay_menutupi False, tunggu_reminder False",
+          pelajaran.overlay_menutupi(page) is False and pelajaran.tunggu_reminder(page) is False)
+    page.close()
+
     # --- Soal menulis prWriting (potongan HTML meniru rekaman: TinyMCE di iframe, Done, modal "Oops") ---
     def halaman_tulis(tolak=False):
         return ('<div class="learning__headerIW">Type your answer in the box and click Done.</div>'
