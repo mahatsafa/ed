@@ -157,3 +157,40 @@ bila dilewati.
 
 Posisi terakhir: Lesson 3 selesai sampai Practice; Step 3 Interact 1 belum; Lesson 4 Prepare menunggu audio pulih.
 Commit terakhir di kode: lihat `git log -3`.
+
+## 7c. Pembaruan sesi 2026-11-23/24 (audio, mikrofon virtual, media di ujung)
+Terbukti (log + screenshot, bukan tebakan):
+- Audio Chromium macet setiap sesi mikrofon ASLI aktif (log `rdp-source: q overrun`, jam AudioContext 0 dtk).
+  Pemulihan: matikan proses AudioService atau buka ulang Chromium. Mikrofon asli + keluaran audio tidak bisa dipakai bersamaan.
+- Solusi yang jalan: mikrofon virtual senyap. File hening `~/.engdis-hening.wav` (60 dtk, dibuat dengan modul wave) dan
+  skrip `buka_chr_mik_senyap.sh` (flag `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream
+  --use-file-for-fake-audio-capture`). Dengan ini jam audio normal (2,009 dtk per 2 dtk). Flag ini BELUM masuk `bot.py`
+  (mengubah cara Chromium dibuka, menunggu persetujuan pemilik akun). `--disable-audio-output` DITOLAK: mikrofon ikut hilang.
+- Chromium yang dibuka dari proses latar belakang tanpa DISPLAY tidak tampil; skrip di atas menyetel DISPLAY/WAYLAND_DISPLAY.
+- Bot bisa dijalankan tanpa terminal pemilik akun lewat pseudo-terminal: `tail -f fifo | script -qfc "python bot.py ..."`;
+  Enter diberikan dengan menulis baris kosong ke fifo (mode belajar tetap aktif).
+- Lesson 4 Practice selesai dikerjakan bot. Perbaikan `putar_video` (commit 4bdb7a3): media paused <= 1 dtk dari akhir
+  dan Play tak memulainya dalam 5 dtk -> peringatan lalu lanjut. Terbukti di Unit 6 Lesson 1 Interview Practice halaman 44
+  (audio `b2lrine.mp3` dipakai ulang dari halaman 43; Play situs melompat ke posisi tersimpan 69,3 dtk, rewind currentTime ditimpa).
+- Sidik jari: test_mock 142 LULUS, 0 GAGAL (jalankan dengan SIGINT default: `perl -e '$SIG{INT}="DEFAULT"; exec @ARGV' python -u test_mock.py`;
+  proses latar belakang biasa membuat 2 uji Ctrl+C gagal palsu). Commit terakhir kode: 4bdb7a3.
+
+Belum selesai / belum terbukti:
+- Interact 1 (Lesson 3 Step 3): handler belum ada. Teramati: Start aktif setelah klik gambar karakter dan kalimat peran;
+  setelah Start muncul "Prepare to speak..." dan kalimat 1 (suara komputer) aktif; alur selesai belum teramati
+  (dulu terhenti karena audio macet). Selektor Start di halaman ini: `.speakingInteractPanelsWrapper a.button.continue`
+  (BUKAN SEL["start"]). Ulangi pengamatan dengan mikrofon virtual senyap.
+- Lesson 2 "Do It!" Step 1 Explore: halaman dengan 7 zona seret tanpa handler (bot berhenti, screenshot `*_elemen_belum_didukung.png`).
+- Lesson 5 Practice: banyak peringatan "Tugas TIDAK terbukti selesai setelah Check Answer"; belum diperiksa.
+- Apakah situs menghitung Interview Practice halaman 44 selesai setelah dilewati: belum terbukti.
+- Step Test: tetap dikerjakan manual oleh pemilik akun (permintaan agar bot mengerjakan Test dengan nilai tinggi ditolak).
+- Keputusan menunggu: masukkan flag mikrofon virtual ke `buka_chrome` di bot.py? Step "Let's review" unit 9.
+- Password akun pernah tertulis di chat (baris 71); sebaiknya diganti.
+
+Cek awal sesi baru:
+```bash
+cd ~/engdis-bot/.claude/worktrees/tahap-2-elemen
+git fetch -q && git status -sb | head -2
+ps -eo args | grep -E "[b]ot.py|[t]est_mock" | wc -l
+```
+Harapan: tidak ada "ahead", 0 proses. Chromium bot (port 9222) mungkin masih hidup; login bisa habis semalam.
