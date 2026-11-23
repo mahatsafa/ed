@@ -694,10 +694,9 @@ with sync_playwright() as pw:
                      'Object.defineProperty(P, "duration", {get: () => window.dur});'
                      'Object.defineProperty(P, "ended", {get: () => window.selesai});</script>' + video_palsu + (
         '<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
-        ' if (window.main || window.t >= window.dur - 1) return; window.main = true; window.t = 0.5;'
-        ' setTimeout(() => { window.t = 18; window.selesai = true; }, 800); });</script>'))
-    check("video: media sisa di ujung diulang dari awal lalu diputar sampai selesai",
-          pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.selesai") is True)
+        ' return; });</script>'))  # Play tak berpengaruh (situs asli)
+    check("video: media sisa di ujung dan Play tak memulainya -> dilanjutkan, bukan berhenti",
+          pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.t") == 18.3)
     page.close()
     page = browser.new_page()
     asli_tambahan = pelajaran.TAMBAHAN_TUNGGU_MEDIA

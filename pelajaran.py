@@ -84,10 +84,9 @@ MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
                  ".some(m => m.ended || (m.duration > 0 && m.currentTime >= m.duration - 0.5))")
-JS_ULANG_DARI_AWAL = """() => { let n = 0;
-  for (const m of document.querySelectorAll('video,audio')) {
-    if (m.paused && m.duration > 0 && m.currentTime >= m.duration - 1) { try { m.currentTime = 0; n++; } catch (e) {} } }
-  return n > 0; }"""  # audio yang sama dari halaman sebelumnya masih di ujung: Play situs tak memulainya (Interview, 2026-11-23)
+MEDIA_DI_UJUNG = ("() => [...document.querySelectorAll('video,audio')]"
+                  ".some(m => m.paused && m.duration > 0 && m.currentTime >= m.duration - 1)")
+# audio yang sama dari halaman sebelumnya masih di ujung: situs melompatkan Play ke posisi tersimpannya (Interview 2026-11-24)
 JS_PASANG_AKHIR = """() => { const token = window.__botToken = {}; window.__botSelesai = false;
   const hidup = () => window.__botToken === token;  // elemen audio dipakai ulang antar halaman: pendengar lama harus mati
   document.querySelectorAll('video,audio').forEach((m) => {
@@ -154,8 +153,7 @@ def putar_video(page, timeout=TIMEOUT_MS):
             overlay.first.wait_for(state="visible", timeout=min(timeout, 3000))
         except PWTimeout:
             pass
-    if not page.evaluate(MEDIA_JALAN) and page.evaluate(JS_ULANG_DARI_AWAL):
-        setup_logger().info("Media sisa halaman sebelumnya masih di ujung; diulang dari awal.")
+    di_ujung = (not page.evaluate(MEDIA_JALAN)) and page.evaluate(MEDIA_DI_UJUNG)
     if page.evaluate(MEDIA_JALAN):  # sudah berjalan: klik tombol putar akan MENJEDA (situs asli 14:17)
         setup_logger().info("Media sudah berjalan; tombol putar tidak diklik.")
     elif overlay.count() and overlay.first.is_visible() and di_layar(overlay.first):
@@ -167,7 +165,14 @@ def putar_video(page, timeout=TIMEOUT_MS):
             click(page, video, "video", timeout)
     else:
         return False
-    periksa(page, "video_terputar", lambda: page.wait_for_function(MEDIA_JALAN, timeout=timeout))
+    if di_ujung:  # sudah diputar sampai habis di halaman sebelumnya; Play situs mungkin tak memulainya lagi
+        try:
+            page.wait_for_function(MEDIA_JALAN, timeout=min(timeout, 5000))
+        except PWTimeout:
+            setup_logger().warning("Media sisa halaman sebelumnya di ujung dan Play tak memulainya; dianggap sudah diputar.")
+            return True
+    else:
+        periksa(page, "video_terputar", lambda: page.wait_for_function(MEDIA_JALAN, timeout=timeout))
     durasi = page.evaluate(MEDIA_DURASI)  # situs menghitung progres hanya kalau media diputar sampai habis
     if not isinstance(durasi, (int, float)) or not 0 < durasi <= MAX_DURASI_MEDIA:
         screenshot_on_fail(page, "durasi_media_tak_wajar")
