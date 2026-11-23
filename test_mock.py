@@ -686,6 +686,19 @@ with sync_playwright() as pw:
     check("video: media sudah berjalan -> tombol putar tidak diklik, tetap ditunggu sampai selesai",
           pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.klik") == 0)
     page.close()
+    page = browser.new_page()  # audio yang sama dari halaman sebelumnya masih di ujung; Play tak berpengaruh sebelum diulang
+    page.set_content('<script>window.main = false; window.t = 18.3; window.selesai = false; window.dur = 18.44;'
+                     'const P = HTMLMediaElement.prototype;'
+                     'Object.defineProperty(P, "paused", {get: () => !window.main});'
+                     'Object.defineProperty(P, "currentTime", {get: () => window.t, set: (v) => { window.t = v; }});'
+                     'Object.defineProperty(P, "duration", {get: () => window.dur});'
+                     'Object.defineProperty(P, "ended", {get: () => window.selesai});</script>' + video_palsu + (
+        '<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
+        ' if (window.main || window.t >= window.dur - 1) return; window.main = true; window.t = 0.5;'
+        ' setTimeout(() => { window.t = 18; window.selesai = true; }, 800); });</script>'))
+    check("video: media sisa di ujung diulang dari awal lalu diputar sampai selesai",
+          pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.selesai") is True)
+    page.close()
     page = browser.new_page()
     asli_tambahan = pelajaran.TAMBAHAN_TUNGGU_MEDIA
     pelajaran.TAMBAHAN_TUNGGU_MEDIA = 1

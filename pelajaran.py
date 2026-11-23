@@ -84,6 +84,10 @@ MEDIA_JALAN = ("() => [...document.querySelectorAll('video,audio')]"
                ".some(m => !m.paused && m.currentTime > 0)")
 MEDIA_SELESAI = ("() => [...document.querySelectorAll('video,audio')]"
                  ".some(m => m.ended || (m.duration > 0 && m.currentTime >= m.duration - 0.5))")
+JS_ULANG_DARI_AWAL = """() => { let n = 0;
+  for (const m of document.querySelectorAll('video,audio')) {
+    if (m.paused && m.duration > 0 && m.currentTime >= m.duration - 1) { try { m.currentTime = 0; n++; } catch (e) {} } }
+  return n > 0; }"""  # audio yang sama dari halaman sebelumnya masih di ujung: Play situs tak memulainya (Interview, 2026-11-23)
 JS_PASANG_AKHIR = """() => { const token = window.__botToken = {}; window.__botSelesai = false;
   const hidup = () => window.__botToken === token;  // elemen audio dipakai ulang antar halaman: pendengar lama harus mati
   document.querySelectorAll('video,audio').forEach((m) => {
@@ -150,6 +154,8 @@ def putar_video(page, timeout=TIMEOUT_MS):
             overlay.first.wait_for(state="visible", timeout=min(timeout, 3000))
         except PWTimeout:
             pass
+    if not page.evaluate(MEDIA_JALAN) and page.evaluate(JS_ULANG_DARI_AWAL):
+        setup_logger().info("Media sisa halaman sebelumnya masih di ujung; diulang dari awal.")
     if page.evaluate(MEDIA_JALAN):  # sudah berjalan: klik tombol putar akan MENJEDA (situs asli 14:17)
         setup_logger().info("Media sudah berjalan; tombol putar tidak diklik.")
     elif overlay.count() and overlay.first.is_visible() and di_layar(overlay.first):
