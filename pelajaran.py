@@ -471,7 +471,8 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
     instruksi = page.locator(SEL["instruksi"])
     teks = instruksi.first.inner_text().strip() if instruksi.count() else ""
     if (TIDAK_DIDUKUNG.match(teks) and not page.locator(f"{TEKS_BEBAS}:visible").count()
-            and not page.locator(TULISAN["area"]).count() and not page.locator(SEL["webrtc"]).count()):  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
+            and not page.locator(TULISAN["area"]).count() and not page.locator(SEL["webrtc"]).count()
+            and not page.locator(SEL["dropdown"]).count()):  # dropdown kustom sudah punya handler ("Fill in the blanks" + dropdown)  # instruksi (mis. "Type ...") yang belum bisa dikerjakan bot
         screenshot_on_fail(page, "instruksi_belum_didukung")
         raise JenisSoalTidakDikenal(f"Instruksi soal belum didukung: {teks[:60]!r}")
     belum = elemen_belum_didukung(page)  # sebelum mengklik apa pun

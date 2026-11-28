@@ -161,7 +161,7 @@ function gambar() {
     $("#petunjuk").textContent = "Choose the best answer.";
     area.innerHTML = '<input type="radio" class="layout__radio" id="r1" name="r1"><label for="r1">Opsi</label>';
   } else if (jenis === "dropdown") {
-    $("#petunjuk").textContent = "Select the correct answer from the drop-down list.";
+    $("#petunjuk").textContent = new URLSearchParams(location.search).get("petunjuk") || "Select the correct answer from the drop-down list.";
     // Dropdown kustom seperti situs asli: daftar muncul di dalam wrapper saat diklik, hilang setelah memilih.
     const dd = (opsi) => `<div class="prFITB__DDLOptionsW"><div class="DDLOptions__selected"></div></div>`;
     area.innerHTML = `<p>It ${dd()} at 10 A.M. and they ${dd()} home.</p>`;

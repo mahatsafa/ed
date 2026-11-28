@@ -249,6 +249,15 @@ with sync_playwright() as pw:
           and page.locator(".learning__tasksNav_task--done").count() == 0)
     page.close()
 
+    page = browser.new_page()  # situs asli (Lesson 1 Practice): dropdown berinstruksi "Fill in the blanks ..." tidak ditolak
+    page.goto(URL_ASLI + "?skenario=dropdown&petunjuk=Fill%20in%20the%20blanks%20with%20the%20correct%20answers.")
+    page.wait_for_selector(".DDLOptions__selected")
+    ring_fill = {"halaman": 0, "tak_terverifikasi": 0}
+    check("dropdown berinstruksi 'Fill in the blanks': dikerjakan, tidak ditolak sebagai tak didukung",
+          not raises(lambda: pelajaran.kerjakan_halaman(page, ring_fill, 4000), pelajaran.JenisSoalTidakDikenal)
+          and all(t.strip() for t in page.locator(".DDLOptions__selected").all_inner_texts()))
+    page.close()
+
     page = browser.new_page()
     page.goto(URL_ASLI + "?skenario=dropdown")
     page.wait_for_selector(".DDLOptions__selected")
