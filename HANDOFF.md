@@ -194,3 +194,12 @@ git fetch -q && git status -sb | head -2
 ps -eo args | grep -E "[b]ot.py|[t]est_mock" | wc -l
 ```
 Harapan: tidak ada "ahead", 0 proses. Chromium bot (port 9222) mungkin masih hidup; login bisa habis semalam.
+
+## 7d. Pembaruan 2026-11-28 (penyederhanaan jalan)
+- Keputusan Bima: tetap Python (tanpa rombak/Rust); jalur API ala BossNz tidak dipakai (§2). Flag mikrofon senyap DISETUJUI.
+- Commit 7f26059: `bot.py --buka` memakai mikrofon virtual senyap + env WSLg; `buka_chr_mik_senyap.sh` dihapus.
+  test_mock 145 LULUS, 0 GAGAL (3 uji baru: getUserMedia tanpa dialog, WAV dibuat otomatis, WAV rusak ditolak).
+- `jalan.sh`: satu perintah `./jalan.sh` (= bot.py --target real --buka, log ke logs/jalan_real.txt).
+- Sengaja TANPA handler baru untuk 7 zona seret Lesson 2 dan Interact 1: halaman tak dikenal -> mode manual (bot merekam).
+- BELUM terbukti: jam audio normal di situs asli lewat jalur `--buka` baru; perilaku bot di Interact 1 dan peringatan Lesson 5.
+- Langkah berikut: tutup Chromium lama di 9222, jalankan `./jalan.sh`, login, Enter; baca logs/jalan_real.txt.
