@@ -281,6 +281,18 @@ with sync_playwright() as pw:
           and page.evaluate("() => window.seeAnswerKlik") == 0)
     page.close()
 
+    page = browser.new_page()  # soal checkbox (situs asli Lesson 2 Practice): opsi pertama dicentang, selesai tercatat
+    page.goto(URL_ASLI + "?skenario=centang")
+    page.wait_for_selector(".lessonAnswersWrapper")
+    ring_c = {"halaman": 0, "tak_terverifikasi": 0}
+    pelajaran.kerjakan_halaman(page, ring_c, 4000)
+    check("centang: opsi pertama saja dicentang, Check dijalankan, tugas tercatat selesai, See Answer nol",
+          page.evaluate("() => [...document.querySelectorAll('input.lessonMultipleCheck')].map(i => i.checked)")
+          == [True, False, False]
+          and page.locator(".learning__tasksNav_task--done").count() == 1
+          and ring_c["tak_terverifikasi"] == 0 and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
     def opsi(n, tersembunyi=False):
         return (f'<div class="prMCQ__answers{" hide" if tersembunyi else ""}"><input type="radio" class="layout__radio" '
                 f'id="question-1_answer-{n}"><label for="question-1_answer-{n}">opsi {n}</label></div>')

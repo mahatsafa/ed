@@ -21,6 +21,8 @@ SEL = {
     "modal_tutup": "button.close, [aria-label=Close], .close",
     "video": "video",
     "radio": "input.layout__radio",
+    "centang": "input.lessonMultipleCheck",  # checkbox "pilih kalimat" (situs asli 2026-11-28); label.overlayCheckbox menutupinya
+    "centang_grup": ".lessonAnswersWrapper",  # satu pertanyaan checkbox
     "mcq_set": ".prMCQ__qaSet",  # satu pertanyaan pilihan ganda (halaman bisa punya beberapa)
     "dropdown": ".prFITB__DDLOptionsW",  # dropdown kustom (bukan <select>)
     "dd_terpilih": ".DDLOptions__selected",
@@ -214,6 +216,31 @@ def pilih_radio(page, timeout=TIMEOUT_MS):
             raise JenisSoalTidakDikenal(f"Pertanyaan {n + 1} tak punya opsi yang terlihat.")
         click(page, label, f"pertanyaan_{n + 1}_pilihan_1", timeout)
         periksa(page, f"pertanyaan_{n + 1}_terjawab", lambda r=pertama: expect(r).to_be_checked(timeout=timeout))
+    return True
+
+
+MAKS_GRUP_CENTANG = 10  # batas atas pertanyaan checkbox per halaman
+
+
+def pilih_centang(page, timeout=TIMEOUT_MS):
+    """Soal checkbox ("select the sentences"): centang opsi pertama tiap pertanyaan lewat labelnya (tanpa membaca kunci).
+    Kalau opsi pertama tak bisa dicentang: berhenti (gagal tertutup)."""
+    if not page.locator(SEL["centang"]).count():
+        return False
+    grup = page.locator(SEL["centang_grup"])
+    if not 0 < grup.count() <= MAKS_GRUP_CENTANG or grup.count() != page.locator(
+            f"{SEL['centang_grup']}:has({SEL['centang']})").count():
+        screenshot_on_fail(page, "centang_pengelompokan_aneh")
+        raise JenisSoalTidakDikenal("Checkbox tak bisa dikelompokkan per pertanyaan.")
+    for n in range(grup.count()):
+        kotak = grup.nth(n).locator(SEL["centang"]).first
+        label = grup.nth(n).locator("label.overlayCheckbox").first
+        if not label.count():
+            screenshot_on_fail(page, f"centang_tanpa_label_{n + 1}")
+            raise JenisSoalTidakDikenal(f"Checkbox pertanyaan {n + 1} tanpa label yang bisa diklik.")
+        if not kotak.is_checked():
+            click(page, label, f"centang_{n + 1}_opsi_1", timeout)
+        periksa(page, f"centang_{n + 1}_terpilih", lambda k=kotak: expect(k).to_be_checked(timeout=timeout))
     return True
 
 
@@ -485,6 +512,9 @@ def kerjakan_halaman(page, ringkasan, timeout=TIMEOUT_MS):
         dikerjakan.append("video")
     if pilih_radio(page, timeout):
         dikerjakan.append("pilihan")
+        perlu_cek = True
+    if pilih_centang(page, timeout):
+        dikerjakan.append("centang")
         perlu_cek = True
     if isi_dropdown(page, timeout):
         dikerjakan.append("dropdown")
