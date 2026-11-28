@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import wave
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -32,6 +33,36 @@ PORT_CDP = 9222
 PROFIL_CHROME = Path.home() / ".engdis-chrome-profil"  # di luar repo; sesi login tersimpan di sini
 CHROME_CADANGAN = ("/usr/bin/google-chrome", "/usr/bin/chromium-browser")  # kalau Chromium Playwright tak ada
 MAKS_TUNGGU_CHROME = 80  # x 0,25 detik = 20 detik menunggu port debug siap
+HENING_WAV = Path.home() / ".engdis-hening.wav"  # mikrofon virtual senyap (mikrofon asli membuat audio macet)
+DETIK_HENING = 60  # batas atas panjang file hening
+
+
+def siapkan_hening(path=HENING_WAV):
+    """Pastikan file WAV senyap ada dan sah. Belum ada = dibuat (mono 16 kHz). Ada tapi rusak = berhenti."""
+    if not path.exists():
+        with wave.open(str(path), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(16000)
+            w.writeframes(b"\x00\x00" * 16000 * DETIK_HENING)
+    try:
+        with wave.open(str(path), "rb") as w:
+            if w.getnframes() <= 0:
+                raise ValueError("kosong")
+    except (wave.Error, EOFError, ValueError) as err:
+        raise RuntimeError(f"File hening {path} tidak sah ({err}). Hapus file itu agar dibuat ulang.") from err
+    return path
+
+
+def env_tampilan():
+    """WSLg: setel DISPLAY dkk kalau belum ada, supaya Chromium tampil walau bot dijalankan dari proses latar belakang."""
+    if not os.path.isdir("/mnt/wslg"):
+        return dict(os.environ)
+    env = dict(os.environ)
+    env.setdefault("DISPLAY", ":0")
+    env.setdefault("WAYLAND_DISPLAY", "wayland-0")
+    env.setdefault("XDG_RUNTIME_DIR", "/mnt/wslg/runtime-dir")
+    return env
 
 
 def load_credentials():
@@ -58,17 +89,21 @@ def buka_chrome(pw, url, port=PORT_CDP, tanpa_jendela=False, profil=PROFIL_CHROM
     atau None kalau port itu sudah dipakai browser lain (dipakai ulang, tidak dibuka dobel)."""
     log = setup_logger()
     if cdp_siap(port):
-        log.info("Port %d sudah ada browser; dipakai ulang, tidak membuka baru.", port)
+        log.warning("Port %d sudah ada browser; dipakai ulang. Flag mikrofon senyap TIDAK berlaku untuk browser itu "
+                    "(kalau audio macet, tutup dan buka ulang lewat --buka).", port)
         return None
     exe = next((p for p in (pw.chromium.executable_path, *CHROME_CADANGAN) if os.path.exists(p)), None)
     if exe is None:
         raise RuntimeError("Chromium tidak ditemukan. Jalankan: .venv/bin/python -m playwright install chromium")
     profil.mkdir(parents=True, exist_ok=True)
-    perintah = [exe, f"--remote-debugging-port={port}", f"--user-data-dir={profil}", "--no-first-run", url]
+    hening = siapkan_hening()
+    perintah = [exe, f"--remote-debugging-port={port}", f"--user-data-dir={profil}", "--no-first-run",
+                "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream",
+                f"--use-file-for-fake-audio-capture={hening}", url]
     if tanpa_jendela:  # hanya untuk uji otomatis
         perintah.insert(1, "--headless=new")
-    log.info("Membuka Chromium: %s", exe)
-    proses = subprocess.Popen(perintah, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log.info("Membuka Chromium: %s (mikrofon virtual senyap: %s)", exe, hening)
+    proses = subprocess.Popen(perintah, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env_tampilan())
     for _ in range(MAKS_TUNGGU_CHROME):  # batas atas menunggu
         if cdp_siap(port):
             return proses

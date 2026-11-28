@@ -4,11 +4,12 @@ import signal
 import subprocess
 import sys
 import time
+import wave
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-from bot import URLS, buka_chrome, cdp_siap, load_credentials
+from bot import URLS, buka_chrome, cdp_siap, load_credentials, siapkan_hening
 from helpers import LOG_DIR, setup_logger
 from login import login
 import belajar
@@ -939,12 +940,28 @@ with sync_playwright() as pw:
               proses_buka is not None and cdp_siap(port_buka) and any("mock.html" in u for u in urls_buka))
         check("buka: port sudah dipakai -> dipakai ulang, tidak membuka dobel",
               buka_chrome(pw, URLS["mock"], port_buka, tanpa_jendela=True, profil=profil_uji) is None)
+        halaman_buka = next(pg for c in sambung.contexts for pg in c.pages if "mock.html" in pg.url)
+        mik = halaman_buka.evaluate("""async () => {
+            try { const s = await navigator.mediaDevices.getUserMedia({audio: true});
+                  return s.getAudioTracks().length; } catch (e) { return String(e); } }""")
+        check("buka: mikrofon virtual senyap tersedia tanpa dialog (getUserMedia berhasil)", mik == 1)
         sambung.close()
     finally:
         if proses_buka is not None:
             proses_buka.terminate()
             proses_buka.wait(timeout=20)
     check("buka: setelah ditutup, port debug mati", not cdp_siap(port_buka))
+    wav_uji = LOG_DIR / "hening_uji.wav"
+    wav_uji.unlink(missing_ok=True)
+    siapkan_hening(wav_uji)
+    with wave.open(str(wav_uji), "rb") as w:
+        check("hening: file dibuat otomatis, sah, mono 16 kHz, berisi sampel nol",
+              w.getnframes() == 16000 * 60 and w.getnchannels() == 1 and w.getframerate() == 16000
+              and not any(w.readframes(16000)))
+    wav_uji.write_bytes(b"bukan wav")
+    check("hening: file rusak -> berhenti (gagal tertutup), tidak ditimpa", raises(lambda: siapkan_hening(wav_uji), RuntimeError)
+          and wav_uji.read_bytes() == b"bukan wav")
+    wav_uji.unlink()
 
     # --- Mode attach: "manusia" membuka + login, lalu bot menempel lewat CDP ---
     peramban = pw.chromium.launch(args=[f"--remote-debugging-port={PORT_CDP}"])
