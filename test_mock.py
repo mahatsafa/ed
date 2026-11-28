@@ -641,6 +641,17 @@ with sync_playwright() as pw:
     check("video: putar_video menunggu media selesai (ended), bukan hanya mulai",
           pelajaran.putar_video(page, 4000) is True and page.evaluate("() => window.selesai") is True)
     page.close()
+    page = browser.new_page()  # video panjang (600 dtk): cukup DETIK_VIDEO detik diputar, tidak menunggu habis
+    page.set_content(media_palsu("600") + video_palsu + (
+        '<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'
+        ' if (window.main) return; window.main = true; window.t = 0.5;'
+        ' setInterval(() => { window.t += 1; }, 250); });</script>'))
+    mulai_t = time.time()
+    hasil_cukup = pelajaran.putar_video(page, 4000)
+    check("video: panjang -> cukup DETIK_VIDEO detik lalu lanjut (tidak menunggu habis)",
+          hasil_cukup is True and page.evaluate("() => window.selesai") is False
+          and page.evaluate("() => window.t") >= pelajaran.DETIK_VIDEO and time.time() - mulai_t < 20)
+    page.close()
     page = browser.new_page()  # situs asli (audio Lesson 3): saat selesai pemutar kembali ke 0, paused, ended false
     page.set_content(media_palsu("2") + video_palsu + (
         '<script>document.querySelector(".learning__RAMRButton--play").addEventListener("click", () => {'

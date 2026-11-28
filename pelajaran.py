@@ -103,6 +103,9 @@ MEDIA_DURASI = ("() => { const m = [...document.querySelectorAll('video,audio')]
                 ".find(m => !m.paused && m.currentTime > 0); return m ? m.duration : NaN; }")
 MAX_DURASI_MEDIA = 20 * 60  # detik; durasi tak terbaca atau lebih panjang dari ini = tak ditunggu, berhenti
 TAMBAHAN_TUNGGU_MEDIA = 30  # detik di atas durasi media
+DETIK_VIDEO = 5  # keputusan pemilik akun (2026-11-28): elemen <video> cukup diputar sekian detik lalu lanjut
+MEDIA_VIDEO_CUKUP = ("() => [...document.querySelectorAll('video')]"
+                     ".some(m => !m.paused && m.currentTime >= " + str(DETIK_VIDEO) + ")")
 TEKS_HALAMAN = "() => document.body.innerText.replace(/\\d/g, '')"  # angka dibuang (waktu video)
 
 
@@ -173,14 +176,14 @@ def putar_video(page, timeout=TIMEOUT_MS):
             return True
     else:
         periksa(page, "video_terputar", lambda: page.wait_for_function(MEDIA_JALAN, timeout=timeout))
-    durasi = page.evaluate(MEDIA_DURASI)  # situs menghitung progres hanya kalau media diputar sampai habis
+    durasi = page.evaluate(MEDIA_DURASI)  # (2026-11-28) video cukup DETIK_VIDEO detik; progres video itu mungkin tak dihitung situs
     if not isinstance(durasi, (int, float)) or not 0 < durasi <= MAX_DURASI_MEDIA:
         screenshot_on_fail(page, "durasi_media_tak_wajar")
         raise JenisSoalTidakDikenal(f"Durasi media tak terbaca atau di luar batas: {durasi!r}")
-    setup_logger().info("Menunggu media selesai (%.0f detik)", durasi)
+    setup_logger().info("Menunggu media selesai (%.0f detik; video cukup %d detik)", durasi, DETIK_VIDEO)
     page.evaluate(JS_PASANG_AKHIR)
     periksa(page, "video_selesai", lambda: page.wait_for_function(
-        f"() => window.__botSelesai === true || ({MEDIA_SELESAI})()", timeout=int((durasi + TAMBAHAN_TUNGGU_MEDIA) * 1000)))
+        f"() => window.__botSelesai === true || ({MEDIA_SELESAI})() || ({MEDIA_VIDEO_CUKUP})()", timeout=int((durasi + TAMBAHAN_TUNGGU_MEDIA) * 1000)))
     return True
 
 
