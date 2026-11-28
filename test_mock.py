@@ -556,6 +556,18 @@ with sync_playwright() as pw:
     kotak_dikte = "".join(f'<div class="prOpenEnded__qaSet"><textarea class="prOpenEnded__qaItemText prOpenEnded__qaItemText--textarea"></textarea></div>' for _ in range(3))
     dikte = ('<div class="learning__headerIW">Type the sentences that you hear in the dictation.</div>' + kotak_dikte
              + '<ul><li id="CheckAnswer">Check</li></ul><a class="tasksBtnext" href="#">Next</a>')
+    page.set_content(  # situs asli: tiap kalimat punya speaker; ng-reflect-is-playing true saat diputar
+        '<div class="learning__headerIW">Type the sentences that you hear in the dictation.</div>' + "".join(
+            '<div class="prOpenEnded__qaSet"><div class="prOpenEnded__qaItemPlayerW"><ed-speaker-player ng-reflect-is-playing="false">'
+            '<div class="speakerPlayBtn" style="width:30px;height:30px"></div></ed-speaker-player></div>'
+            '<textarea class="prOpenEnded__qaItemText prOpenEnded__qaItemText--textarea"></textarea></div>' for _ in range(3))
+        + '<script>window.urut = []; document.querySelectorAll(".speakerPlayBtn").forEach((b, i) => b.addEventListener("click", () => {'
+          ' const p = b.closest("ed-speaker-player"); p.setAttribute("ng-reflect-is-playing", "true"); window.urut.push("mulai" + i);'
+          ' setTimeout(() => { p.setAttribute("ng-reflect-is-playing", "false"); window.urut.push("selesai" + i); }, 400); }));</script>')
+    pelajaran.isi_teks_bebas(page, 4000)
+    check("dikte: tiap speaker diputar sampai selesai satu per satu sebelum textarea diisi",
+          page.evaluate("() => window.urut") == ["mulai0", "selesai0", "mulai1", "selesai1", "mulai2", "selesai2"]
+          and page.eval_on_selector_all(".prOpenEnded__qaItemText--textarea", "els => els.every(e => e.value === 'a')"))
     page.set_content(dikte)
     check("dikte: tiga textarea terisi, handler melapor dikerjakan",
           pelajaran.isi_teks_bebas(page, 2000) is True

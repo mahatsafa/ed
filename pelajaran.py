@@ -71,6 +71,9 @@ JS_ISIAN_TEKS = """() => [...document.querySelectorAll('textarea, [contenteditab
 TEKS_BEBAS = ".prOpenEnded__qaItemText--textarea"  # soal dikte/isian bebas: satu textarea per kalimat
 ISIAN_TEKS = "a"  # jawaban salah tidak masalah (keputusan pemilik akun); yang perlu: soal tercatat dikerjakan
 MAX_TEKS_BEBAS = 20  # batas textarea per halaman; lebih dari ini = bentuk halaman tak terduga, berhenti
+SPEAKER_DIKTE = ".prOpenEnded__qaItemPlayerW .speakerPlayBtn"  # ikon speaker tiap kalimat dikte
+JS_SPEAKER_JALAN = "() => !!document.querySelector('ed-speaker-player[ng-reflect-is-playing=\"true\"]')"
+DETIK_MAKS_SPEAKER = 30  # batas tunggu satu kalimat dikte selesai diputar
 # Soal menulis (prWriting): editor TinyMCE di iframe, tombol Done; kurang dari 5 kata ditolak situs.
 TULISAN = {
     "area": ".prWriting__practice",
@@ -375,6 +378,24 @@ def halaman_bacaan(page):
     return page.evaluate(JS_HALAMAN_BACAAN, {"cek": SEL["cek"], "next": SEL["next"]})
 
 
+def putar_speaker_dikte(page, timeout=TIMEOUT_MS):
+    """Eksperimen (2026-11-28): dikte diisi "a" tanpa mendengar tidak tercatat selesai (0 dari 10). Dugaan, belum terbukti:
+    situs mensyaratkan tiap kalimat diputar dulu. Putar semua speaker sampai selesai; tidak fatal bila gagal."""
+    log = setup_logger()
+    tombol = page.locator(SPEAKER_DIKTE)
+    for i in range(min(tombol.count(), MAX_TEKS_BEBAS)):  # batas atas = jumlah kalimat dikte
+        click(page, tombol.nth(i), f"speaker_{i + 1}", timeout)
+        try:
+            page.wait_for_function(JS_SPEAKER_JALAN, timeout=3000)
+        except PWTimeout:
+            log.warning("Speaker %d tak tampak berputar setelah diklik", i + 1)
+            continue
+        try:
+            page.wait_for_function(f"() => !({JS_SPEAKER_JALAN})()", timeout=DETIK_MAKS_SPEAKER * 1000)
+        except PWTimeout:
+            log.warning("Speaker %d belum selesai dalam %d detik; lanjut", i + 1, DETIK_MAKS_SPEAKER)
+
+
 def isi_teks_bebas(page, timeout=TIMEOUT_MS):
     """Soal dikte/isian bebas (prOpenEnded): isi tiap textarea yang terlihat dengan teks apa saja. Cara ini
     dipelajari dari rekaman pengguna (ketik di textarea lalu Check Answer)."""
@@ -385,6 +406,7 @@ def isi_teks_bebas(page, timeout=TIMEOUT_MS):
     if n > MAX_TEKS_BEBAS:
         screenshot_on_fail(page, "teks_bebas_terlalu_banyak")
         raise JenisSoalTidakDikenal(f"{n} kotak teks (batas {MAX_TEKS_BEBAS}).")
+    putar_speaker_dikte(page, timeout)
     for i in range(n):
         setup_logger().info("Isi teks: kotak_%d", i + 1)
         kotak.nth(i).fill(ISIAN_TEKS, timeout=timeout)
