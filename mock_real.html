@@ -56,6 +56,7 @@ window.opsiKlik = 0;
 if (skenario === "kosong") tugas = ["kosong"];  // tidak ada kontrol soal yang dikenal
 if (skenario === "dropdown") tugas = ["dropdown"];  // hanya soal dropdown kustom
 if (skenario === "centang") tugas = ["centang"];  // soal checkbox "select the sentences"
+if (skenario === "pilihancentang") tugas = ["pilihancentang"];  // pilihan ganda berupa checkbox (multipleSelection)
 if (skenario === "pilihan") tugas = ["pilihan"];  // hanya soal pilihan ganda (2 pertanyaan)
 if (skenario === "radioluar") tugas = ["radioluar"];  // radio di luar .prMCQ__qaSet (tak bisa dikelompokkan)
 let i = 0;
@@ -164,6 +165,12 @@ function gambar() {
       `<div class="lessonMultipleAnswer"><div class="multiRadio"><input class="lessonMultipleCheck" name="r1" type="checkbox" ` +
       `style="position:absolute;opacity:0"><label class="overlayCheckbox" style="position:relative;z-index:1" onclick="this.previousElementSibling.click()">&nbsp;&nbsp;&nbsp;</label></div>` +
       `<span>Kalimat ${n}</span></div>`).join("") + "</div>";
+  } else if (jenis === "pilihancentang") {
+    $("#petunjuk").textContent = "Choose the best answers for the questions below.";
+    area.innerHTML = [[1, 2, 3], [4, 5, 6]].map((ids, q) =>
+      `<div class="prMCQ__qaSet"><div class="prMCQ__questionText">Pertanyaan ${q + 1}?</div>` + ids.map((n) =>
+        `<div class="prMCQ__answers"><input type="checkbox" class="layout__checkbox" id="question-${q + 1}_answer-${n}" ${q === 1 && n === 4 ? "checked" : ""}>` +
+        `<label class="prMCQ__answerLabel" for="question-${q + 1}_answer-${n}">Opsi ${n}</label></div>`).join("") + "</div>").join("");
   } else if (jenis === "radioluar") {
     $("#petunjuk").textContent = "Choose the best answer.";
     area.innerHTML = '<input type="radio" class="layout__radio" id="r1" name="r1"><label for="r1">Opsi</label>';
@@ -257,6 +264,8 @@ $("#CheckAnswer").addEventListener("click", () => {
   const jenis = tugas[i];
   const benar = (jenis === "pilihan" && [...document.querySelectorAll(".prMCQ__qaSet")]
                     .every((s) => s.querySelector("input.layout__radio:checked"))) ||
+                (jenis === "pilihancentang" && [...document.querySelectorAll(".prMCQ__qaSet")]
+                    .every((s) => s.querySelectorAll("input.layout__checkbox:checked").length === 1)) ||
                 (jenis === "centang" && document.querySelectorAll("input.lessonMultipleCheck:checked").length === 1) ||
                 (jenis === "dropdown" && [...document.querySelectorAll(".DDLOptions__selected")]
                     .every((e) => e.textContent.trim() !== "")) ||

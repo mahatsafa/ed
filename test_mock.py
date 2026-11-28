@@ -281,6 +281,19 @@ with sync_playwright() as pw:
           and page.evaluate("() => window.seeAnswerKlik") == 0)
     page.close()
 
+    page = browser.new_page()  # pilihan ganda berupa checkbox; opsi pertama pertanyaan 2 sudah tercentang: tidak dicopot
+    page.goto(URL_ASLI + "?skenario=pilihancentang")
+    page.wait_for_selector(".prMCQ__qaSet")
+    ring_pc = {"halaman": 0, "tak_terverifikasi": 0}
+    pelajaran.kerjakan_halaman(page, ring_pc, 4000)
+    check("pilihan checkbox: opsi pertama tiap pertanyaan tercentang (yang sudah tercentang tidak dicopot), tercatat selesai",
+          page.evaluate("() => [...document.querySelectorAll('.prMCQ__qaSet')]"
+                        ".map(s => [...s.querySelectorAll('input:checked')].map(i => i.id))")
+          == [["question-1_answer-1"], ["question-2_answer-4"]]
+          and page.locator(".learning__tasksNav_task--done").count() == 1
+          and ring_pc["tak_terverifikasi"] == 0 and page.evaluate("() => window.seeAnswerKlik") == 0)
+    page.close()
+
     page = browser.new_page()  # soal checkbox (situs asli Lesson 2 Practice): opsi pertama dicentang, selesai tercatat
     page.goto(URL_ASLI + "?skenario=centang")
     page.wait_for_selector(".lessonAnswersWrapper")

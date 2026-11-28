@@ -20,7 +20,7 @@ SEL = {
     "modal": "ngb-modal-window",
     "modal_tutup": "button.close, [aria-label=Close], .close",
     "video": "video",
-    "radio": "input.layout__radio",
+    "radio": "input.layout__radio, input.layout__checkbox",  # checkbox = pilihan ganda "Choose the best answers" (situs asli 2026-11-28)
     "centang": "input.lessonMultipleCheck",  # checkbox "pilih kalimat" (situs asli 2026-11-28); label.overlayCheckbox menutupinya
     "centang_grup": ".lessonAnswersWrapper",  # satu pertanyaan checkbox
     "mcq_set": ".prMCQ__qaSet",  # satu pertanyaan pilihan ganda (halaman bisa punya beberapa)
@@ -217,7 +217,8 @@ def pilih_radio(page, timeout=TIMEOUT_MS):
         if pertama is None:
             screenshot_on_fail(page, f"radio_tak_terlihat_{n + 1}")
             raise JenisSoalTidakDikenal(f"Pertanyaan {n + 1} tak punya opsi yang terlihat.")
-        click(page, label, f"pertanyaan_{n + 1}_pilihan_1", timeout)
+        if not pertama.is_checked():  # checkbox yang sudah tercentang akan tercopot kalau diklik lagi
+            click(page, label, f"pertanyaan_{n + 1}_pilihan_1", timeout)
         periksa(page, f"pertanyaan_{n + 1}_terjawab", lambda r=pertama: expect(r).to_be_checked(timeout=timeout))
     return True
 
